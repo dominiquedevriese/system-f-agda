@@ -119,7 +119,7 @@ data [_]_⊢res_∈_ (s : Style) {m n} (Γ : Ctx m n) : Result m n → Type n �
 ⊢step (var x)   = nothing
 ⊢step (Λ ⊢t)    = just (⊢done (Λ ⊢t))
 ⊢step (λ' a ⊢t) = just (⊢done (λ' a ⊢t))
-⊢step (μ a ⊢t)  = just (⊢continue (⊢t [/⊢tmTm μ a ⊢t ]))
+-- ⊢step (μ a ⊢t)  = just (⊢continue (⊢t [/⊢tmTm μ a ⊢t ]))
 ⊢step {t = t [ a ]} (⊢t [ .a ]) with step t | ⊢step ⊢t
 ... | just ._ | just (⊢continue ⊢t′) = just (⊢continue (⊢t′ [ a ]))
 ... | just ._ | just (⊢done (Λ ⊢t′)) = just (⊢continue (⊢t′ [/⊢tmTp a ]))
@@ -156,7 +156,7 @@ progress : ∀ {s t} {a : Type 0} → [ s ] [] ⊢ t ∈ a → Maybe.Is-just (st
 progress (var ())
 progress (Λ t) = just tt
 progress (λ' a t) = just tt
-progress (μ a t) = just tt
+-- progress (μ a t) = just tt
 progress {t = t [ a ]} (⊢t [ .a ]) with step t | ⊢step ⊢t | progress ⊢t
 ... | just ._ | just (⊢continue _) | just tt = just tt
 ... | just ._ | just (⊢done (Λ _)) | just tt = just tt

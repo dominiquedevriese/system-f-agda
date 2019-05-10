@@ -80,7 +80,7 @@ data [_]_⊢_∈_ (s : Style) {m n} (Γ : Ctx m n) : Term m n → Type n → Set
   var    : (x : Fin m) → [ s ] Γ ⊢ var x ∈ lookup Γ x
   Λ      : ∀ {t a} → [ s ] (weakenCtx Γ) ⊢ t ∈ a → [ s ] Γ ⊢ Λ t ∈ ∀' a
   λ'     : ∀ {t b} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ b → [ s ] Γ ⊢ λ' a t ∈ a →' b
-  μ      : ∀ {t} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ a → [ s ] Γ ⊢ μ a t ∈ a
+  -- μ      : ∀ {t} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ a → [ s ] Γ ⊢ μ a t ∈ a
   _[_]   : ∀ {t a} → [ s ] Γ ⊢ t ∈ ∀' a → (b : Type n) → [ s ] Γ ⊢ t [ b ] ∈ a [/tp b ]
   _·_    : ∀ {t₁ t₂ a b} → [ s ] Γ ⊢ t₁ ∈ a →' b → [ s ] Γ ⊢ t₂ ∈ a → [ s ] Γ ⊢ t₁ · t₂ ∈ b
   fold   : ∀ {t} → (a : Type (1 + n)) → [ s ] Γ ⊢ t ∈ a [/tp μ a ] →
@@ -217,7 +217,7 @@ module WtTermTypeSubst where
   _/_ {Γ = Γ} (Λ ⊢t)  σ =
     Λ (⊢substCtx (sym (map-weaken-⊙ Γ σ)) (⊢t / σ ↑))
   λ' a ⊢t           / σ = λ' (a Tp./ σ) (⊢t / σ)
-  μ a ⊢t            / σ = μ  (a Tp./ σ) (⊢t / σ)
+  -- μ a ⊢t            / σ = μ  (a Tp./ σ) (⊢t / σ)
   _[_] {a = a} ⊢t b / σ =
     ⊢substTp (sym (sub-commutes a)) ((⊢t / σ) [ b Tp./ σ ])
   ⊢s · ⊢t           / σ = (⊢s / σ) · (⊢t / σ)
@@ -286,8 +286,8 @@ module WtTermTermSubst where
     Λ    (ρ      /Var ⊢substCtx (C./Var-weaken ρ Γ) ⊢t)
   _/Var_ {Γ = Γ} ρ (λ' a ⊢t) =
     λ' a (ρ Var.↑ /Var ⊢substCtx (C./Var-∷ a ρ Γ) ⊢t)
-  _/Var_ {Γ = Γ} ρ (μ a ⊢t)  =
-    μ  a (ρ Var.↑ /Var ⊢substCtx (C./Var-∷ a ρ Γ) ⊢t)
+  -- _/Var_ {Γ = Γ} ρ (μ a ⊢t)  =
+    -- μ  a (ρ Var.↑ /Var ⊢substCtx (C./Var-∷ a ρ Γ) ⊢t)
   ρ /Var (⊢t [ b ])          = (ρ /Var ⊢t) [ b ]
   ρ /Var (⊢s · ⊢t)           = (ρ /Var ⊢s) · (ρ /Var ⊢t)
   _/Var_ {s = iso} ρ (fold a ⊢t)         = fold   a (ρ /Var ⊢t)
@@ -334,7 +334,7 @@ module WtTermTermSubst where
   var x       / ⊢ρ = lookup-⊢ x ⊢ρ
   Λ ⊢t        / ⊢ρ = Λ (⊢t / (WtTermTypeSubst.weakenAll ⊢ρ))
   λ' a ⊢t     / ⊢ρ = λ' a (⊢t / ⊢ρ ↑)
-  μ a ⊢t      / ⊢ρ = μ a (⊢t / ⊢ρ ↑)
+  -- μ a ⊢t      / ⊢ρ = μ a (⊢t / ⊢ρ ↑)
   (⊢t [ a ])  / ⊢ρ = (⊢t / ⊢ρ) [ a ]
   (⊢s · ⊢t)   / ⊢ρ = (⊢s / ⊢ρ) · (⊢t / ⊢ρ)
   _/_ {s = iso} (fold a ⊢t) ⊢ρ = fold a (⊢t / ⊢ρ)

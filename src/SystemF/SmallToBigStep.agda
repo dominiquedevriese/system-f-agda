@@ -1,4 +1,4 @@
-module SystemF.MultiStepReduction where
+module SystemF.SmallToBigStep where
 
 open import Codata.Musical.Notation
 open import Category.Monad
@@ -58,18 +58,6 @@ type-soundness ⊢t = does-not-fail ⊢ ⊢t ↓
 
 open PF.AlternativeEquality
   renaming (return to returnP; fail to failP; _>>=_ to _>>=P_)
-
--- Lemma: values don't reduce.
-step-val : ∀ {m n} (v : Val m n) → step ⌜ v ⌝ ≡ just (done v)
-step-val (Λ a)      = P.refl
-step-val (λ' a t)   = P.refl
-step-val (fold a v) with step ⌜ v ⌝ | step-val v
-... | just (continue t) | ()
-... | just (done w) | w≡v = P.cong (map (lower a)) w≡v
-  where lower : ∀ {m n} → Type (1 + n) → Result m n → Result m n
-        lower a (done v)     = done (fold a v)
-        lower a (continue t) = continue t
-... | nothing | ()
 
 -- Lemma: _↓ "preserves" values.
 ↓-val : ∀ {m n} (v : Val m n) → ⌜ v ⌝ ↓ ≡ return v

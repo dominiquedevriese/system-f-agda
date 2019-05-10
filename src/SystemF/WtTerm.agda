@@ -28,6 +28,9 @@ open import Relation.Nullary using (¬_)
 open import SystemF.Type
 open import SystemF.Term
 
+data Style : Set where
+  iso equi : Style
+
 ------------------------------------------------------------------------
 -- Typing derivations for polymorphic and iso-recursive lambda terms
 
@@ -57,50 +60,63 @@ module CtxSubst where
 open TypeSubst using () renaming (_[/_]  to _[/tp_])
 open CtxSubst  using () renaming (weaken to weakenCtx)
 
-infix  4 _⊢_∈_ _⊢_∉_ _⊢val_∈_ _⊢ⁿ_∈_
+infix  4 [_]_⊢_∈_ [_]_⊢_∉_ [_]_⊢val_∈_ [_]_⊢ⁿ_∈_
 infixl 9 _·_ _[_]
 
+foldMaybe : (s : Style) → ∀ {m n} → (a : Type (1 + n)) → (t : Term m n) → Term m n
+foldMaybe iso a t = fold a t
+foldMaybe equi a t = t
+
+unfoldMaybe : (s : Style) → ∀ {m n} → (a : Type (1 + n)) → (t : Term m n) → Term m n
+unfoldMaybe iso a t = unfold a t
+unfoldMaybe equi a t = t
+
+foldMaybeVal : (s : Style) → ∀ {m n} → (a : Type (1 + n)) → (t : Val m n) → Val m n
+foldMaybeVal iso a t = fold a t
+foldMaybeVal equi a t = t
+
 -- Typing derivations for well-typed terms
-data _⊢_∈_ {m n} (Γ : Ctx m n) : Term m n → Type n → Set where
-  var    : (x : Fin m) → Γ ⊢ var x ∈ lookup Γ x
-  Λ      : ∀ {t a} → (weakenCtx Γ) ⊢ t ∈ a → Γ ⊢ Λ t ∈ ∀' a
-  λ'     : ∀ {t b} → (a : Type n) → a ∷ Γ ⊢ t ∈ b → Γ ⊢ λ' a t ∈ a →' b
-  μ      : ∀ {t} → (a : Type n) → a ∷ Γ ⊢ t ∈ a → Γ ⊢ μ a t ∈ a
-  _[_]   : ∀ {t a} → Γ ⊢ t ∈ ∀' a → (b : Type n) → Γ ⊢ t [ b ] ∈ a [/tp b ]
-  _·_    : ∀ {s t a b} → Γ ⊢ s ∈ a →' b → Γ ⊢ t ∈ a → Γ ⊢ s · t ∈ b
-  fold   : ∀ {t} → (a : Type (1 + n)) → Γ ⊢ t ∈ a [/tp μ a ] →
-           Γ ⊢ fold a t ∈ μ a
-  unfold : ∀ {t} → (a : Type (1 + n)) → Γ ⊢ t ∈ μ a →
-           Γ ⊢ unfold a t ∈ a [/tp μ a ]
+data [_]_⊢_∈_ (s : Style) {m n} (Γ : Ctx m n) : Term m n → Type n → Set where
+  var    : (x : Fin m) → [ s ] Γ ⊢ var x ∈ lookup Γ x
+  Λ      : ∀ {t a} → [ s ] (weakenCtx Γ) ⊢ t ∈ a → [ s ] Γ ⊢ Λ t ∈ ∀' a
+  λ'     : ∀ {t b} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ b → [ s ] Γ ⊢ λ' a t ∈ a →' b
+  μ      : ∀ {t} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ a → [ s ] Γ ⊢ μ a t ∈ a
+  _[_]   : ∀ {t a} → [ s ] Γ ⊢ t ∈ ∀' a → (b : Type n) → [ s ] Γ ⊢ t [ b ] ∈ a [/tp b ]
+  _·_    : ∀ {t₁ t₂ a b} → [ s ] Γ ⊢ t₁ ∈ a →' b → [ s ] Γ ⊢ t₂ ∈ a → [ s ] Γ ⊢ t₁ · t₂ ∈ b
+  fold   : ∀ {t} → (a : Type (1 + n)) → [ s ] Γ ⊢ t ∈ a [/tp μ a ] →
+           [ s ] Γ ⊢ foldMaybe s a t ∈ μ a
+  unfold : ∀ {t} → (a : Type (1 + n)) → [ s ] Γ ⊢ t ∈ μ a →
+           [ s ] Γ ⊢ unfoldMaybe s a t ∈ a [/tp μ a ]
 
 -- Negation of well-typedness.
-_⊢_∉_ : ∀ {m n} → Ctx m n → Term m n → Type n → Set
-Γ ⊢ t ∉ a = ¬ Γ ⊢ t ∈ a
+[_]_⊢_∉_ : ∀ s {m n} → Ctx m n → Term m n → Type n → Set
+[ s ] Γ ⊢ t ∉ a = ¬ [ s ] Γ ⊢ t ∈ a
 
 -- Typing derivations for well-typed values.
-data _⊢val_∈_ {m n} (Γ : Ctx m n) : Val m n → Type n → Set where
-  Λ    : ∀ {t a} → (weakenCtx Γ) ⊢ t ∈ a → Γ ⊢val Λ t ∈ ∀' a
-  λ'   : ∀ {t b} → (a : Type n) → a ∷ Γ ⊢ t ∈ b → Γ ⊢val λ' a t ∈ a →' b
-  fold : ∀ {v} → (a : Type (1 + n)) → Γ ⊢val v ∈ a [/tp μ a ] →
-         Γ ⊢val fold a v ∈ μ a
+data [_]_⊢val_∈_ (s : Style) {m n} (Γ : Ctx m n) : Val m n → Type n → Set where
+  Λ    : ∀ {t a} → [ s ] (weakenCtx Γ) ⊢ t ∈ a → [ s ] Γ ⊢val Λ t ∈ ∀' a
+  λ'   : ∀ {t b} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ b → [ s ] Γ ⊢val λ' a t ∈ a →' b
+  fold : ∀ {v} → (a : Type (1 + n)) → [ s ] Γ ⊢val v ∈ a [/tp μ a ] →
+         [ s ] Γ ⊢val foldMaybeVal s a v ∈ μ a
 
 -- Conversion from well-typed values to well-typed terms.
-⊢⌜_⌝ : ∀ {m n} {Γ : Ctx m n} {v a} → Γ ⊢val v ∈ a → Γ ⊢ ⌜ v ⌝ ∈ a
+⊢⌜_⌝ : ∀ {s m n} {Γ : Ctx m n} {v a} → [ s ] Γ ⊢val v ∈ a → [ s ] Γ ⊢ ⌜ v ⌝ ∈ a
 ⊢⌜ Λ x      ⌝ = Λ x
 ⊢⌜ λ' a t   ⌝ = λ' a t
-⊢⌜ fold a t ⌝ = fold a ⊢⌜ t ⌝
+⊢⌜_⌝ {s = iso} (fold a t) = fold a ⊢⌜ t ⌝
+⊢⌜_⌝ {s = equi} (fold a t) = fold a ⊢⌜ t ⌝
 
 -- Collections of typing derivations for well-typed terms.
-data _⊢ⁿ_∈_ {m n} (Γ : Ctx m n) :
+data [_]_⊢ⁿ_∈_ (s : Style) {m n} (Γ : Ctx m n) :
   ∀ {k} → Vec (Term m n) k → Vec (Type n) k → Set where
-    []  : Γ ⊢ⁿ [] ∈ []
+    []  : [ s ] Γ ⊢ⁿ [] ∈ []
     _∷_ : ∀ {t a k} {ts : Vec (Term m n) k} {as : Vec (Type n) k} →
-          Γ ⊢ t ∈ a → Γ ⊢ⁿ ts ∈ as → Γ ⊢ⁿ t ∷ ts ∈ a ∷ as
+          [ s ] Γ ⊢ t ∈ a → [ s ] Γ ⊢ⁿ ts ∈ as → [ s ] Γ ⊢ⁿ t ∷ ts ∈ a ∷ as
 
 -- Lookup a well-typed term in a collection thereof.
-lookup-⊢ : ∀ {m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k}
+lookup-⊢ : ∀ {s m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k}
              {as : Vec (Type n) k} →
-           (x : Fin k) → Γ ⊢ⁿ ts ∈ as → Γ ⊢ lookup ts x ∈ lookup as x
+           (x : Fin k) → [ s ] Γ ⊢ⁿ ts ∈ as → [ s ] Γ ⊢ lookup ts x ∈ lookup as x
 lookup-⊢ zero    (⊢t ∷ ⊢ts) = ⊢t
 lookup-⊢ (suc x) (⊢t ∷ ⊢ts) = lookup-⊢ x ⊢ts
 
@@ -171,16 +187,16 @@ module CtxLemmas where
 
 -- Helper lemmas for applying type and term equalities in typing
 -- derivations
-⊢subst : ∀ {m n} {Γ₁ Γ₂ : Ctx m n} {t₁ t₂ : Term m n} {a₁ a₂ : Type n} →
-  Γ₁ ≡ Γ₂ → t₁ ≡ t₂ → a₁ ≡ a₂ → Γ₁ ⊢ t₁ ∈ a₁ → Γ₂ ⊢ t₂ ∈ a₂
+⊢subst : ∀ {s m n} {Γ₁ Γ₂ : Ctx m n} {t₁ t₂ : Term m n} {a₁ a₂ : Type n} →
+  Γ₁ ≡ Γ₂ → t₁ ≡ t₂ → a₁ ≡ a₂ → [ s ] Γ₁ ⊢ t₁ ∈ a₁ → [ s ] Γ₂ ⊢ t₂ ∈ a₂
 ⊢subst refl refl refl hyp = hyp
 
-⊢substCtx : ∀ {m n} {Γ₁ Γ₂ : Ctx m n} {t : Term m n} {a : Type n} →
-  Γ₁ ≡ Γ₂ → Γ₁ ⊢ t ∈ a → Γ₂ ⊢ t ∈ a
+⊢substCtx : ∀ {s m n} {Γ₁ Γ₂ : Ctx m n} {t : Term m n} {a : Type n} →
+  Γ₁ ≡ Γ₂ → [ s ] Γ₁ ⊢ t ∈ a → [ s ] Γ₂ ⊢ t ∈ a
 ⊢substCtx refl hyp = hyp
 
-⊢substTp : ∀ {m n} {Γ : Ctx m n} {t : Term m n} {a₁ a₂ : Type n} →
-  a₁ ≡ a₂ → Γ ⊢ t ∈ a₁ → Γ ⊢ t ∈ a₂
+⊢substTp : ∀ {s m n} {Γ : Ctx m n} {t : Term m n} {a₁ a₂ : Type n} →
+  a₁ ≡ a₂ → [ s ] Γ ⊢ t ∈ a₁ → [ s ] Γ ⊢ t ∈ a₂
 ⊢substTp refl hyp = hyp
 
 
@@ -195,8 +211,8 @@ module WtTermTypeSubst where
   infixl 8 _/_
 
   -- Type substitutions lifted to well-typed terms
-  _/_ : ∀ {m n k} {Γ : Ctx m n} {t : Term m n} {a : Type n} →
-        Γ ⊢ t ∈ a → (σ : Sub Type n k) → Γ C./ σ ⊢ t Tm./ σ ∈ a Tp./ σ
+  _/_ : ∀ {s m n k} {Γ : Ctx m n} {t : Term m n} {a : Type n} →
+        [ s ] Γ ⊢ t ∈ a → (σ : Sub Type n k) → [ s ] Γ C./ σ ⊢ t Tm./ σ ∈ a Tp./ σ
   _/_  {Γ = Γ} (var x) σ = ⊢substTp (lookup-⊙ x {ρ₁ = Γ}) (var x)
   _/_ {Γ = Γ} (Λ ⊢t)  σ =
     Λ (⊢substCtx (sym (map-weaken-⊙ Γ σ)) (⊢t / σ ↑))
@@ -205,36 +221,40 @@ module WtTermTypeSubst where
   _[_] {a = a} ⊢t b / σ =
     ⊢substTp (sym (sub-commutes a)) ((⊢t / σ) [ b Tp./ σ ])
   ⊢s · ⊢t           / σ = (⊢s / σ) · (⊢t / σ)
-  fold a ⊢t         / σ =
+  _/_ {s = iso} (fold a ⊢t) σ =
     fold (a Tp./ σ ↑) (⊢substTp (sub-commutes a) (⊢t / σ))
-  unfold a ⊢t       / σ =
+  _/_ {s = equi} (fold a ⊢t) σ =
+    fold (a Tp./ σ ↑) (⊢substTp (sub-commutes a) (⊢t / σ))
+  _/_ {s = iso} (unfold a ⊢t) σ =
+    ⊢substTp (sym (sub-commutes a)) (unfold (a Tp./ σ ↑) (⊢t / σ))
+  _/_ {s = equi} (unfold a ⊢t) σ =
     ⊢substTp (sym (sub-commutes a)) (unfold (a Tp./ σ ↑) (⊢t / σ))
 
   -- Weakening of terms with additional type variables lifted to
   -- well-typed terms.
-  weaken : ∀ {m n} {Γ : Ctx m n} {t : Term m n} {a : Type n} →
-           Γ ⊢ t ∈ a → C.weaken Γ ⊢ Tm.weaken t ∈ Tp.weaken a
+  weaken : ∀ {s m n} {Γ : Ctx m n} {t : Term m n} {a : Type n} →
+           [ s ] Γ ⊢ t ∈ a → [ s ] C.weaken Γ ⊢ Tm.weaken t ∈ Tp.weaken a
   weaken {t = t} {a = a} ⊢t =
     ⊢subst (sym map-weaken) (Tm./-wk t) (/-wk {t = a}) (⊢t / wk)
 
   -- Weakening of terms with additional type variables lifted to
   -- collections of well-typed terms.
-  weakenAll : ∀ {m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k}
-                {as : Vec (Type n) k} → Γ ⊢ⁿ ts ∈ as →
-                C.weaken Γ ⊢ⁿ map Tm.weaken ts ∈ map Tp.weaken as
+  weakenAll : ∀ {s m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k}
+                {as : Vec (Type n) k} → [ s ] Γ ⊢ⁿ ts ∈ as →
+                [ s ] C.weaken Γ ⊢ⁿ map Tm.weaken ts ∈ map Tp.weaken as
   weakenAll {ts = []}    {[]}    []         = []
   weakenAll {ts = _ ∷ _} {_ ∷ _} (⊢t ∷ ⊢ts) = weaken ⊢t ∷ weakenAll ⊢ts
 
   -- Shorthand for single-variable type substitutions in well-typed
   -- terms.
-  _[/_] : ∀ {m n} {Γ : Ctx m (1 + n)} {t a} →
-          Γ ⊢ t ∈ a → (b : Type n) → Γ C./ sub b ⊢ t Tm./ sub b ∈ a Tp./ sub b
+  _[/_] : ∀ {s m n} {Γ : Ctx m (1 + n)} {t a} →
+          [ s ] Γ ⊢ t ∈ a → (b : Type n) → [ s ] Γ C./ sub b ⊢ t Tm./ sub b ∈ a Tp./ sub b
   ⊢t [/ b ] = ⊢t / sub b
 
   -- A weakened version of the shorthand for single-variable type
   -- substitutions that fits well with well-typed type application.
-  _[/_]′ : ∀ {m n} {Γ : Ctx m n} {t a} → C.weaken Γ ⊢ t ∈ a →
-           (b : Type n) → Γ ⊢ t Tm./ sub b ∈ a Tp./ sub b
+  _[/_]′ : ∀ {s m n} {Γ : Ctx m n} {t a} → [ s ] C.weaken Γ ⊢ t ∈ a →
+           (b : Type n) → [ s ] Γ ⊢ t Tm./ sub b ∈ a Tp./ sub b
   ⊢t [/ b ]′ = ⊢substCtx Tp.map-weaken-⊙-sub (⊢t / sub b)
 
 
@@ -247,19 +267,19 @@ module WtTermTermSubst where
     module C   = CtxLemmas
     TmSub = Tm.TermSub Term
 
-  infix 4 _⇒_⊢_
+  infix 4 [_]_⇒_⊢_
 
   -- Well-typed term substitutions are collections of well-typed terms.
-  _⇒_⊢_ : ∀ {m n k} → Ctx m n → Ctx k n → TmSub m n k → Set
-  Γ ⇒ Δ ⊢ ρ = Δ ⊢ⁿ ρ ∈ Γ
+  [_]_⇒_⊢_ : ∀ (s : Style) {m n k} → Ctx m n → Ctx k n → TmSub m n k → Set
+  [ s ] Γ ⇒ Δ ⊢ ρ = [ s ] Δ ⊢ⁿ ρ ∈ Γ
 
   infixl 8  _/_ _/Var_
   infix  10 _↑
 
   -- Application of term variable substitutions (renaming) lifted to
   -- well-typed terms.
-  _/Var_ : ∀ {m n k} {Γ : Ctx k n} {t : Term m n} {a : Type n}
-             (ρ : Sub Fin m k) → ρ C./Var Γ ⊢ t ∈ a → Γ ⊢ t Tm./Var ρ ∈ a
+  _/Var_ : ∀ {s m n k} {Γ : Ctx k n} {t : Term m n} {a : Type n}
+             (ρ : Sub Fin m k) → [ s ] ρ C./Var Γ ⊢ t ∈ a → [ s ] Γ ⊢ t Tm./Var ρ ∈ a
   _/Var_ {Γ = Γ} ρ (var x)   =
     ⊢substTp (sym (C./Var-lookup x ρ Γ)) (var (lookup ρ x))
   _/Var_ {Γ = Γ} ρ (Λ ⊢t)    =
@@ -270,57 +290,61 @@ module WtTermTermSubst where
     μ  a (ρ Var.↑ /Var ⊢substCtx (C./Var-∷ a ρ Γ) ⊢t)
   ρ /Var (⊢t [ b ])          = (ρ /Var ⊢t) [ b ]
   ρ /Var (⊢s · ⊢t)           = (ρ /Var ⊢s) · (ρ /Var ⊢t)
-  ρ /Var (fold a ⊢t)         = fold   a (ρ /Var ⊢t)
-  ρ /Var (unfold a ⊢t)       = unfold a (ρ /Var ⊢t)
+  _/Var_ {s = iso} ρ (fold a ⊢t)         = fold   a (ρ /Var ⊢t)
+  _/Var_ {s = equi} ρ (fold a ⊢t)         = fold   a (ρ /Var ⊢t)
+  _/Var_ {s = iso} ρ (unfold a ⊢t)       = unfold a (ρ /Var ⊢t)
+  _/Var_ {s = equi} ρ (unfold a ⊢t)       = unfold a (ρ /Var ⊢t)
 
   -- Weakening of terms with additional term variables lifted to
   -- well-typed terms.
-  weaken : ∀ {m n} {Γ : Ctx m n} {t : Term m n} {a b : Type n} →
-           Γ ⊢ t ∈ a → b ∷ Γ ⊢ Tm.weaken t ∈ a
+  weaken : ∀ {s m n} {Γ : Ctx m n} {t : Term m n} {a b : Type n} →
+           [ s ] Γ ⊢ t ∈ a → [ s ] b ∷ Γ ⊢ Tm.weaken t ∈ a
   weaken {Γ = Γ} {b = b} ⊢t =
     Var.wk /Var ⊢substCtx (C.wkVar-/Var-∷ Γ b) ⊢t
 
   -- Weakening of terms with additional term variables lifted to
   -- collections of well-typed terms.
-  weakenAll : ∀ {m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k}
+  weakenAll : ∀ {s m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k}
                 {as : Vec (Type n) k} {b : Type n} →
-              Γ ⊢ⁿ ts ∈ as → b ∷ Γ ⊢ⁿ map Tm.weaken ts ∈ as
+              [ s ] Γ ⊢ⁿ ts ∈ as → [ s ] b ∷ Γ ⊢ⁿ map Tm.weaken ts ∈ as
   weakenAll {ts = []}    {[]}    []         = []
   weakenAll {ts = _ ∷ _} {_ ∷ _} (⊢t ∷ ⊢ts) = weaken ⊢t ∷ weakenAll ⊢ts
 
   -- Lifting of well-typed term substitutions.
-  _↑ : ∀ {m n k} {Γ : Ctx m n} {Δ : Ctx k n} {ρ b} →
-       Γ ⇒ Δ ⊢ ρ → b ∷ Γ ⇒ b ∷ Δ ⊢ ρ Tm.↑
+  _↑ : ∀ {s m n k} {Γ : Ctx m n} {Δ : Ctx k n} {ρ b} →
+       [ s ] Γ ⇒ Δ ⊢ ρ → [ s ] b ∷ Γ ⇒ b ∷ Δ ⊢ ρ Tm.↑
   ⊢ρ ↑ = var zero ∷ weakenAll ⊢ρ
 
   -- The well-typed identity substitution.
-  id : ∀ {m n} {Γ : Ctx m n} → Γ ⇒ Γ ⊢ Tm.id
-  id {zero}  {Γ = []}    = []
-  id {suc m} {Γ = a ∷ Γ} = id ↑
+  id : ∀ {s m n} {Γ : Ctx m n} → [ s ] Γ ⇒ Γ ⊢ Tm.id
+  id {m = zero}  {Γ = []}    = []
+  id {m = suc m} {Γ = a ∷ Γ} = id ↑
 
   -- Well-typed weakening (as a substitution).
-  wk : ∀ {m n} {Γ : Ctx m n} {a} → Γ ⇒ a ∷ Γ ⊢ Tm.wk
+  wk : ∀ {s m n} {Γ : Ctx m n} {a} → [ s ] Γ ⇒ a ∷ Γ ⊢ Tm.wk
   wk = weakenAll id
 
   -- A well-typed substitution which only replaces the first variable.
-  sub : ∀ {m n} {Γ : Ctx m n} {t a} → Γ ⊢ t ∈ a → a ∷ Γ ⇒ Γ ⊢ Tm.sub t
+  sub : ∀ {s m n} {Γ : Ctx m n} {t a} → [ s ] Γ ⊢ t ∈ a → [ s ] a ∷ Γ ⇒ Γ ⊢ Tm.sub t
   sub ⊢t = ⊢t ∷ id
 
   -- Application of term substitutions lifted to well-typed terms
-  _/_ : ∀ {m n k} {Γ : Ctx m n} {Δ : Ctx k n} {t a ρ} →
-        Γ ⊢ t ∈ a → Γ ⇒ Δ ⊢ ρ → Δ ⊢ t Tm./ ρ ∈ a
+  _/_ : ∀ {s m n k} {Γ : Ctx m n} {Δ : Ctx k n} {t a ρ} →
+        [ s ] Γ ⊢ t ∈ a → [ s ] Γ ⇒ Δ ⊢ ρ → [ s ] Δ ⊢ t Tm./ ρ ∈ a
   var x       / ⊢ρ = lookup-⊢ x ⊢ρ
   Λ ⊢t        / ⊢ρ = Λ (⊢t / (WtTermTypeSubst.weakenAll ⊢ρ))
   λ' a ⊢t     / ⊢ρ = λ' a (⊢t / ⊢ρ ↑)
   μ a ⊢t      / ⊢ρ = μ a (⊢t / ⊢ρ ↑)
   (⊢t [ a ])  / ⊢ρ = (⊢t / ⊢ρ) [ a ]
   (⊢s · ⊢t)   / ⊢ρ = (⊢s / ⊢ρ) · (⊢t / ⊢ρ)
-  fold a ⊢t   / ⊢ρ = fold a (⊢t / ⊢ρ)
-  unfold a ⊢t / ⊢ρ = unfold a (⊢t / ⊢ρ)
+  _/_ {s = iso} (fold a ⊢t) ⊢ρ = fold a (⊢t / ⊢ρ)
+  _/_ {s = equi} (fold a ⊢t) ⊢ρ = fold a (⊢t / ⊢ρ)
+  _/_ {s = iso} (unfold a ⊢t) ⊢ρ = unfold a (⊢t / ⊢ρ)
+  _/_ {s = equi} (unfold a ⊢t) ⊢ρ = unfold a (⊢t / ⊢ρ)
 
   -- Shorthand for well-typed single-variable term substitutions.
-  _[/_] : ∀ {m n} {Γ : Ctx m n} {s t a b} →
-          b ∷ Γ ⊢ s ∈ a → Γ ⊢ t ∈ b → Γ ⊢ s Tm./ Tm.sub t ∈ a
+  _[/_] : ∀ {s m n} {Γ : Ctx m n} {t₁ t₂ a b} →
+          [ s ] b ∷ Γ ⊢ t₁ ∈ a → [ s ] Γ ⊢ t₂ ∈ b → [ s ] Γ ⊢ t₁ Tm./ Tm.sub t₂ ∈ a
   ⊢s [/ ⊢t ] = ⊢s / sub ⊢t
 
 
@@ -340,34 +364,34 @@ module WtTermOperators where
     module ⊢Tm  = WtTermTermSubst
 
   -- Polymorphic identity function
-  id : ∀ {m n} {Γ : Ctx m n} → Γ ⊢ Ut.id ∈ idTp
+  id : ∀ {s m n} {Γ : Ctx m n} → [ s ] Γ ⊢ Ut.id ∈ idTp
   id = Λ (λ' (var (zero)) (var zero))
 
   -- Bottom elimination/univeral property of the initial type
-  ⊥-elim : ∀ {m n} {Γ : Ctx m n} (a : Type n) → Γ ⊢ Ut.⊥-elim a ∈ ⊥ →' a
+  ⊥-elim : ∀ {s m n} {Γ : Ctx m n} (a : Type n) → [ s ] Γ ⊢ Ut.⊥-elim a ∈ ⊥ →' a
   ⊥-elim a = λ' ⊥ ((var zero) [ a ])
 
   -- Unit value
-  tt : ∀ {m n} {Γ : Ctx m n} → Γ ⊢ Ut.tt ∈ ⊤
+  tt : ∀ {s m n} {Γ : Ctx m n} → [ s ] Γ ⊢ Ut.tt ∈ ⊤
   tt = id
 
   -- Top introduction/universal property of the terminal type
-  ⊤-intro : ∀ {m n} {Γ : Ctx m n} → (a : Type n) → Γ ⊢ Ut.⊤-intro a ∈ a →' ⊤
+  ⊤-intro : ∀ {s m n} {Γ : Ctx m n} → (a : Type n) → [ s ] Γ ⊢ Ut.⊤-intro a ∈ a →' ⊤
   ⊤-intro {n = n} a = λ' a (id {n = n})
 
   -- Packing existential types
-  as-∃_pack_,_ : ∀ {m n} {Γ : Ctx m n}
+  as-∃_pack_,_ : ∀ {s m n} {Γ : Ctx m n}
                    (a : Type (1 + n)) (b : Type n) {t : Term m n} →
-                 Γ ⊢ t ∈ a [/tp b ] → Γ ⊢ Ut.as-∃ a pack b , t ∈ ∃ a
+                 [ s ] Γ ⊢ t ∈ a [/tp b ] → [ s ] Γ ⊢ Ut.as-∃ a pack b , t ∈ ∃ a
   as-∃ a pack b , ⊢t =
     Λ (λ' (∀' (weaken↑ a →' var (suc zero))) ((var zero [ weaken b ]) · ⊢t′))
     where ⊢t′ = ⊢Tm.weaken (⊢substTp (weaken-sub a b) (⊢Tp.weaken ⊢t))
 
   -- Unpacking existential types
-  unpack_in'_ : ∀ {m n} {Γ : Ctx m n} {s : Term m n}
-                  {t : Term (1 + m) (1 + n)} {a : Type (1 + n)} {b : Type n} →
-                Γ ⊢ s ∈ ∃ a → a ∷ weakenCtx Γ ⊢ t ∈ weaken b →
-                Γ ⊢ Ut.unpack_in'_ s t {a} {b} ∈ b
+  unpack_in'_ : ∀ {s m n} {Γ : Ctx m n} {t₁ : Term m n}
+                  {t₂ : Term (1 + m) (1 + n)} {a : Type (1 + n)} {b : Type n} →
+                [ s ] Γ ⊢ t₁ ∈ ∃ a → [ s ] a ∷ weakenCtx Γ ⊢ t₂ ∈ weaken b →
+                [ s ] Γ ⊢ Ut.unpack_in'_ t₁ t₂ {a} {b} ∈ b
   unpack_in'_ {a = a} {b = b} ⊢s ⊢t = (⊢s [ b ]) · Λ (⊢substTp a≡ (λ' a ⊢t))
     where
       a≡ : a →' weaken b ≡ weaken↑ a / (sub b) ↑ →' weaken b
@@ -380,34 +404,34 @@ module WtTermOperators where
         a / wk ↑ / (sub b) ↑    ∎)
 
   -- n-ary term abstraction
-  λⁿ : ∀ {m n k} {Γ : Ctx m n} (as : Vec (Type n) k) {b : Type n}
-       {t : Term (k + m) n} → as ++ Γ ⊢ t ∈ b → Γ ⊢ Ut.λⁿ as t ∈ as →ⁿ b
+  λⁿ : ∀ {s m n k} {Γ : Ctx m n} (as : Vec (Type n) k) {b : Type n}
+       {t : Term (k + m) n} → [ s ] as ++ Γ ⊢ t ∈ b → [ s ] Γ ⊢ Ut.λⁿ as t ∈ as →ⁿ b
   λⁿ []       ⊢t = ⊢t
   λⁿ (a ∷ as) ⊢t = λⁿ as (λ' a ⊢t)
 
   infixl 9 _·ⁿ_
 
   -- n-ary term application
-  _·ⁿ_ : ∀ {m n k} {Γ : Ctx m n} {s : Term m n} {ts : Vec (Term m n) k}
+  _·ⁿ_ : ∀ {s m n k} {Γ : Ctx m n} {t₁ : Term m n} {ts : Vec (Term m n) k}
            {as : Vec (Type n) k} {b : Type n} →
-         Γ ⊢ s ∈ as →ⁿ b → Γ ⊢ⁿ ts ∈ as → Γ ⊢ s Ut.·ⁿ ts ∈ b
+         [ s ] Γ ⊢ t₁ ∈ as →ⁿ b → [ s ] Γ ⊢ⁿ ts ∈ as → [ s ] Γ ⊢ t₁ Ut.·ⁿ ts ∈ b
   _·ⁿ_ {ts = []}    {[]}    ⊢s []         = ⊢s
   _·ⁿ_ {ts = _ ∷ _} {_ ∷ _} ⊢s (⊢t ∷ ⊢ts) = ⊢s ·ⁿ ⊢ts · ⊢t
 
   -- Record/tuple constructor
-  new : ∀ {m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k} {as : Vec (Type n) k} →
-        Γ ⊢ⁿ ts ∈ as → Γ ⊢ Ut.new ts {as} ∈ rec as
+  new : ∀ {s m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k} {as : Vec (Type n) k} →
+        [ s ] Γ ⊢ⁿ ts ∈ as → [ s ] Γ ⊢ Ut.new ts {as} ∈ rec as
   new {ts = []}    {[]}     []         = tt
   new {ts = _ ∷ _} {a ∷ as} (⊢t ∷ ⊢ts) =
     Λ (λ' (map weaken (a ∷ as) →ⁿ var zero)
           (var zero ·ⁿ ⊢Tm.weakenAll (⊢Tp.weakenAll (⊢t ∷ ⊢ts))))
 
   -- Field access/projection
-  π : ∀ {m n k} {Γ : Ctx m n} (x : Fin k) {t : Term m n}
+  π : ∀ {s m n k} {Γ : Ctx m n} (x : Fin k) {t : Term m n}
         {as : Vec (Type n) k} →
-      Γ ⊢ t ∈ rec as → Γ ⊢ Ut.π x t {as} ∈ lookup as x
+      [ s ] Γ ⊢ t ∈ rec as → [ s ] Γ ⊢ Ut.π x t {as} ∈ lookup as x
   π             () {as = []}     ⊢t
-  π {m} {Γ = Γ} x  {as = a ∷ as} ⊢t =
+  π {m = m} {Γ = Γ} x  {as = a ∷ as} ⊢t =
     (⊢t [ b ]) · ⊢substTp as′→ⁿb′≡ (λⁿ as′ (var x′))
     where
       as′ = a ∷ as

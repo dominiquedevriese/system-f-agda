@@ -1,3 +1,5 @@
+{-# OPTIONS --allow-unsolved-metas #-}
+
 ----------------------------------------------------------------------
 -- Functional big-step evaluation of terms in the partiality monad
 ----------------------------------------------------------------------
@@ -184,17 +186,17 @@ module _ where
 
 open PF using (fail)
 
-infix 4 _⊢comp_∈_
+infix 4 [_]_⊢comp_∈_
 
 -- A computation is well-typed if it is a well-typed value or it takes
 -- a step towards a well-typed computation.  Note that we exclude the
 -- case of failing well-typed computations through the use of
 -- Maybe.Any.
-_⊢comp_∈_ : ∀ {m n} → Ctx m n → Comp m n → Type n → Set
-Γ ⊢comp c ∈ a = All (MaybeAny.Any (λ v → Γ ⊢val v ∈ a)) c
+[_]_⊢comp_∈_ : ∀ (s : Style) {m n} → Ctx m n → Comp m n → Type n → Set
+[ s ] Γ ⊢comp c ∈ a = All (MaybeAny.Any (λ v → [ s ] Γ ⊢val v ∈ a)) c
 
 -- Well-typed computations do not fail.
-does-not-fail : ∀ {m n} {Γ : Ctx m n} {c a} → Γ ⊢comp c ∈ a → ¬ c ≈ fail
+does-not-fail : ∀ {s m n} {Γ : Ctx m n} {c a} → [ s ] Γ ⊢comp c ∈ a → ¬ c ≈ fail
 does-not-fail (now (MaybeAny.just _)) (now ())
 does-not-fail (later ⊢c)     (laterˡ c-fails) = does-not-fail (♭ ⊢c) c-fails
 
@@ -206,62 +208,64 @@ does-not-fail (later ⊢c)     (laterˡ c-fails) = does-not-fail (♭ ⊢c) c-fa
 open All.Alternative
 open PF.Workaround using (⟦_⟧P)
 
-infix 4 ⊢compP_∈_ ⊢val_∈_
+infix 4 [_]⊢compP_∈_ [_]⊢val_∈_
 
 -- Closed well-typed computation "programs".
-⊢compP_∈_ : Comp 0 0 → Type 0 → Set₁
-⊢compP c ∈ a = AllP (MaybeAny.Any (λ v → [] ⊢val v ∈ a)) c
+[_]⊢compP_∈_ : (s : Style) → Comp 0 0 → Type 0 → Set₁
+[ s ]⊢compP c ∈ a = AllP (MaybeAny.Any (λ v → [ s ] [] ⊢val v ∈ a)) c
 
 -- A short hand for closed well-typed values.
-⊢val_∈_ : Val 0 0 → Type 0 → Set
-⊢val v ∈ a = [] ⊢val v ∈ a
+[_]⊢val_∈_ : (s : Style) → Val 0 0 → Type 0 → Set
+[ s ]⊢val v ∈ a = [ s ] [] ⊢val v ∈ a
 
 mutual
 
   infix 7 ⊢_⇓′ ⊢_[_]′ ⊢_·′_
 
   -- Evaluation of closed terms preserves well-typedness in AllP.
-  ⊢_⇓′ : ∀ {t a} → [] ⊢ t ∈ a → ⊢compP t ⇓ ∈ a
+  ⊢_⇓′ : ∀ {s t a} → [ s ] [] ⊢ t ∈ a → [ s ]⊢compP t ⇓ ∈ a
   ⊢ var ()      ⇓′
   ⊢ Λ ⊢t        ⇓′   = now (just (Λ ⊢t))
   ⊢ λ' a ⊢t     ⇓′   = now (just (λ' a ⊢t))
   ⊢ μ a ⊢t      ⇓′   = later (♯ ⊢ ⊢t [/⊢tmTm μ a ⊢t ] ⇓′)
-  ⊢_⇓′ {t [ a ]} (⊢t [ .a ] ) =
+  ⊢_⇓′ {t = t [ a ]} (⊢t [ .a ] ) =
     t [ a ] ⇓        ≅⟨ []-comp t a ⟩P
     (t ⇓) [ a ]⇓      ⟨  ⊢ ⊢t ⇓′ >>=-congP (λ { .{_} (just ⊢v) →
                          ⊢ ⊢v [ a ]′ }) ⟩P
-  ⊢_⇓′ {s · t} (⊢s · ⊢t) =
+  ⊢_⇓′ {t = s · t} (⊢s · ⊢t) =
     s · t ⇓          ≅⟨ ·-comp s t ⟩P
     (s ⇓) ·⇓ (t ⇓)    ⟨ (⊢ ⊢s ⇓′ >>=-congP λ { .{_} (just ⊢f) →
                          ⊢ ⊢t ⇓′ >>=-congP λ { .{_} (just ⊢v) →
                          ⊢ ⊢f ·′ ⊢v }}) ⟩P
-  ⊢_⇓′ {fold a t} (fold .a ⊢t) =
+  ⊢_⇓′ {s = iso} {t = fold a t} (fold .a ⊢t) =
     fold a t ⇓       ≅⟨ fold-comp a t ⟩P
     fold⇓ a (t ⇓)     ⟨ (⊢ ⊢t ⇓′ >>=-congP λ { .{_} (just ⊢v) →
                          now (just (fold a ⊢v)) }) ⟩P
-  ⊢_⇓′ {unfold a t} (unfold .a ⊢t) =
+  ⊢_⇓′ {s = equi} {t = t} (fold a ⊢t) = {!!}
+  ⊢_⇓′ {s = iso} {t = unfold a t} (unfold .a ⊢t) =
     unfold a t ⇓     ≅⟨ unfold-comp a t ⟩P
     unfold⇓ a (t ⇓)   ⟨ (⊢ ⊢t ⇓′ >>=-congP λ { .{_} (just ⊢v) →
                          ⊢unfold′ a ⊢v }) ⟩P
+  ⊢_⇓′ {s = equi} {t = t} (unfold a ⊢t) = {!!}
 
   -- Evaluation of type application preserves well-typedness in AllP.
-  ⊢_[_]′ : ∀ {v a} → ⊢val v ∈ ∀' a → ∀ b → ⊢compP ⟦ v [ b ]′ ⟧P ∈ a [/tp b ]
+  ⊢_[_]′ : ∀ {s v a} → [ s ]⊢val v ∈ ∀' a → ∀ b → [ s ]⊢compP ⟦ v [ b ]′ ⟧P ∈ a [/tp b ]
   ⊢ Λ ⊢t [ a ]′ = later (♯ ⊢ ⊢t [/⊢tmTp a ] ⇓′)
 
   -- Evaluation of term application preserves well-typedness in AllP.
-  ⊢_·′_ : ∀ {f v a b} → ⊢val f ∈ a →' b → ⊢val v ∈ a → ⊢compP ⟦ f ·′ v ⟧P ∈ b
+  ⊢_·′_ : ∀ {s f v a b} → [ s ]⊢val f ∈ a →' b → [ s ]⊢val v ∈ a → [ s ]⊢compP ⟦ f ·′ v ⟧P ∈ b
   ⊢ λ' a ⊢t ·′ ⊢v = later (♯ ⊢ ⊢t [/⊢tmTm ⊢⌜ ⊢v ⌝ ] ⇓′)
 
   -- Evaluation of recursive type unfolding preserves well-typedness in AllP.
-  ⊢unfold′ : ∀ {v} a → ⊢val v ∈ μ a → ⊢compP ⟦ unfold′ a v ⟧P ∈ a [/tp μ a ]
+  ⊢unfold′ : ∀ {v} a → [ iso ]⊢val v ∈ μ a → [ iso ]⊢compP ⟦ unfold′ a v ⟧P ∈ a [/tp μ a ]
   ⊢unfold′ _ (fold ._ ⊢v) = now (just ⊢v)
 
 infix 7 ⊢_⇓
 
 -- Evaluation of closed terms preserves well-typedness.
-⊢_⇓ : ∀ {t a} → [] ⊢ t ∈ a → [] ⊢comp t ⇓ ∈ a
+⊢_⇓ : ∀ {s t a} → [ s ] [] ⊢ t ∈ a → [ s ] [] ⊢comp t ⇓ ∈ a
 ⊢_⇓ = sound ∘ ⊢_⇓′
 
 -- Type soundness: evaluation of well-typed terms does not fail.
-type-soundness : ∀ {t a} → [] ⊢ t ∈ a → ¬ t ⇓ ≈ fail
+type-soundness : ∀ {s t a} → [ s ] [] ⊢ t ∈ a → ¬ t ⇓ ≈ fail
 type-soundness ⊢t = does-not-fail ⊢ ⊢t ⇓

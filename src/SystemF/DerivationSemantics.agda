@@ -1,5 +1,6 @@
 module SystemF.DerivationSemantics where
 
+open import Data.Nat using (suc; zero)
 open import Data.Vec using (_∷_; [])
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Maybe.Relation.Unary.All as MaybeAll
@@ -147,6 +148,14 @@ preservation {t = t} ty | just .(continue _) | just (⊢continue ty′) = just t
 preservation {t = t} ty | just .(done _) | just (⊢done ty′) = just ⊢⌜ ty′ ⌝
 preservation {t = t} ty | Data.Maybe.nothing | ty′ = MaybeAll.nothing
 
+preservation* : ∀ k {s τ t} (ty : [ s ] [] ⊢ t ∈ τ) →
+                MaybeAll.All (λ res → [ s ] [] ⊢ stepResult res ∈ τ) (step* k t)
+preservation* zero {t = t} ty = just ty
+preservation* (suc k) {t = t} ty with step t | preservation ty
+preservation* (suc k) {t = t} ty | nothing | nothing = nothing
+preservation* (suc k) {t = t} ty | just (continue t′) | just ty′ = preservation* k ty′
+preservation* (suc k) {t = t} ty | just (done v) | just ty′ = just ty′
+
 ⊢⌜⌝-ValueDeriv : ∀ {s v τ} → (ty : [ s ] [] ⊢val v ∈ τ) → ValueDeriv (⊢⌜ ty ⌝)
 ⊢⌜⌝-ValueDeriv (Λ ty) = Λ ty
 ⊢⌜⌝-ValueDeriv (λ' a ty) = λ' ty
@@ -190,3 +199,14 @@ derivFollows {_} {t₁ · t₂} (ty₁ · ty₂) | .(just (done (λ' a _))) | ju
   just (trans⟶d* (app₁-d* evals₁)
     (trans⟶d* (app₂-d* (λ' ty₁′) evals₂)
     (underlying⟶d* (beta ty₁′ ⊢⌜ ty₂′ ⌝ (⊢⌜⌝-ValueDeriv ty₂′)))))
+
+
+derivFollows* : ∀ k {τ t} (ty : [ equi ] [] ⊢ t ∈ τ) →
+                MaybeAllAll (λ ty′ → ty ⟶d* ty′) (preservation* k ty)
+derivFollows* zero ty = just refl⟶d*
+derivFollows* (suc k) {t = t} ty with step t | preservation ty | derivFollows ty
+derivFollows* (suc k) {t = t} ty | nothing | nothing | _ = nothing
+derivFollows* (suc k) {t = t} ty | just (continue t′) | just ty′ | just evals with step* k t′ | preservation* k ty′ | derivFollows* k ty′
+derivFollows* (suc k) {t = t} ty | just (continue t′) | just ty′ | just evals | .nothing | nothing | _ = nothing
+derivFollows* (suc k) {t = t} ty | just (continue t′) | just ty′ | just evals | .(just _) | just x | just evals′ = just (trans⟶d* evals evals′)
+derivFollows* (suc k) {t = t} ty | just (done v) | just ty′ | just evals = just evals

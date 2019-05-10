@@ -192,3 +192,10 @@ step-val (fold a v) with step ⌜ v ⌝ | step-val v
         lower a (done v)     = done (fold a v)
         lower a (continue t) = continue t
 ... | nothing | ()
+
+step* : ∀ (k : ℕ) {m n} → Term m n → Maybe (Result m n)
+step* ℕ.zero t = just (continue t)
+step* (ℕ.suc k) t with step t
+step* (ℕ.suc k) t | nothing = nothing
+step* (ℕ.suc k) t | just (continue t′) = step* k t′
+step* (ℕ.suc k) t | just (done v) = just (done v)

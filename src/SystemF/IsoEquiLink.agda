@@ -20,10 +20,10 @@ open import SystemF.Contexts
 open import SystemF.ReductionJudgement
 open import SystemF.DerivationSemantics
 
-open TypeSubst       using () renaming (_[/_]  to _[/tp_])
-open TermTypeSubst   using () renaming (_[/_]  to _[/tmTp_])
+open TypeSubst       using () renaming (_[/_]  to _[/tp_]; _/_ to _/tp_)
+open TermTypeSubst   using () renaming (_[/_]  to _[/tmTp_]; _/_ to _/tmTp_)
 open TermTermSubst   using () renaming (_[/_]  to _[/tmTm_])
-open WtTermTypeSubst using () renaming (_[/_]′ to _[/⊢tmTp_])
+open WtTermTypeSubst using () renaming (_[/_]′ to _[/⊢tmTp_]; _/_ to _/⊢tmTp_)
 open WtTermTermSubst using () renaming (_[/_]  to _[/⊢tmTm_])
 
 open CtxSubst  using () renaming (weaken to weakenCtx)
@@ -64,14 +64,14 @@ erase-⌜⌝ (fold x v) = erase-⌜⌝ v
 
 module TermTypeAppErase {T : ℕ → Set} (l : Lift T Type) where
   open Lift l hiding (var)
-  open TypeSubst.TypeApp l renaming (_/_ to _/tp_)
+  open TypeSubst.TypeApp l renaming (_/_ to _/tpl_)
   open TermTypeSubst.TermTypeApp l using (_/_)
 
   erase-sub : ∀ {m n k} (t : Term m n) (σ : Sub T n k) → erase t / σ ≡ erase (t / σ)
   erase-sub (var x) σ = refl
   erase-sub (Λ t) σ = cong Λ (erase-sub t (σ ↑))
-  erase-sub (λ' a t) σ = cong (λ' (a /tp σ)) (erase-sub t σ)
-  erase-sub (t [ τ ]) σ = cong (_[ τ /tp σ ]) (erase-sub t σ)
+  erase-sub (λ' a t) σ = cong (λ' (a /tpl σ)) (erase-sub t σ)
+  erase-sub (t [ τ ]) σ = cong (_[ τ /tpl σ ]) (erase-sub t σ)
   erase-sub (t₁ · t₂) σ = cong₂ _·_ (erase-sub t₁ σ) (erase-sub t₂ σ)
   erase-sub (fold τ t) σ = erase-sub t σ
   erase-sub (unfold τ t) σ = erase-sub t σ
@@ -272,21 +272,53 @@ unerase-vty (λ' ty) = refl
 unerase-vty (Λ ty) = refl
 unerase-vty (fold vty) = cong (fold _) (unerase-vty vty)
 
+unerase-⊢substCtx : ∀ {m n} {Γ₁ Γ₂ : Ctx m n} {t : Term m n} {a : Type n} →
+                    (eqΓ : Γ₁ ≡ Γ₂) → (ty : [ equi ] Γ₁ ⊢ t ∈ a) →
+                    unerase (⊢substCtx eqΓ ty) ≡ unerase ty
+unerase-⊢substCtx refl ty = refl
+
+unerase-⊢substTp : ∀ {m n} {Γ : Ctx m n} {t : Term m n} {a₁ a₂ : Type n} →
+                   (eq : a₁ ≡ a₂) → (ty : [ equi ] Γ ⊢ t ∈ a₁) →
+                   unerase (⊢substTp eq ty) ≡ unerase ty
+unerase-⊢substTp refl ty = refl
+
+unerase-tysub : ∀ {m n k} {t₁ : Term m n} {τ₁} {Γ : Ctx m n}
+                (σ : Sub Type n k) →
+                (ty₁ : [ equi ] Γ ⊢ t₁ ∈ τ₁) →
+                unerase (ty₁ /⊢tmTp σ ) ≡ unerase ty₁ /tmTp σ
+unerase-tysub σ (var x) = unerase-⊢substTp (TypeLemmas.lookup-⊙ x) (var x)
+unerase-tysub {Γ = Γ} σ (Λ ty₁) =
+  cong Λ
+    (trans (unerase-⊢substCtx (sym (TypeLemmas.map-weaken-⊙ Γ σ)) (ty₁ /⊢tmTp σ TypeLemmas.↑))
+      (unerase-tysub (σ TypeLemmas.↑) ty₁))
+unerase-tysub σ (λ' a ty₁) = cong (λ' (a /tp σ)) (unerase-tysub σ ty₁)
+unerase-tysub σ (_[_] {a = a} ty₁ b) = trans (unerase-⊢substTp (sym (TypeLemmas.sub-commutes a)) ((ty₁ /⊢tmTp σ) [ b TypeLemmas./ σ ]))
+                              (cong (_[ b TypeLemmas./ σ ]) (unerase-tysub σ ty₁))
+unerase-tysub σ (ty₁ · ty₂) = cong₂ _·_ (unerase-tysub σ ty₁) (unerase-tysub σ ty₂)
+unerase-tysub σ (fold a ty₁) = cong (fold (a TypeLemmas./ σ TypeLemmas.↑))
+                               (trans (unerase-⊢substTp (TypeLemmas.sub-commutes a) (ty₁ /⊢tmTp σ))
+                               (unerase-tysub σ ty₁))
+unerase-tysub σ (unfold a ty₁) =
+  trans (unerase-⊢substTp (sym (TypeLemmas.sub-commutes a)) (unfold (a TypeLemmas./ σ TypeLemmas.↑) (ty₁ /⊢tmTp σ)))
+    (cong (unfold (a TypeLemmas./ σ TypeLemmas.↑)) (unerase-tysub σ ty₁))
+
+unerase-[/⊢tmTp] : ∀ {t₁ : Term 0 1} {τ₁}
+                   (ty₁ : [ equi ] weakenCtx [] ⊢ t₁ ∈ τ₁) τ₂ →
+                   unerase (ty₁ [/⊢tmTp τ₂ ]) ≡ unerase ty₁ [/tmTp τ₂ ]
+unerase-[/⊢tmTp] ty₁ τ₂ = unerase-tysub (sub τ₂) ty₁
+  where open TypeSubst using (sub)
+
 postulate
   unerase-[/⊢tmTm] : ∀ {t₁ : Term 1 0} {t₂ : Term 0 0} {τ₁ τ₂}
                      (ty₁ : [ equi ] τ₁ ∷ [] ⊢ t₁ ∈ τ₂) →
                      (ty₂ : [ equi ] [] ⊢ t₂ ∈ τ₁) →
                      unerase (ty₁ [/⊢tmTm ty₂ ]) ≡ unerase ty₁ [/tmTm unerase ty₂ ]
-  unerase-[/⊢tmTp] : ∀ {t₁ : Term 0 1} {τ₁}
-                     (ty₁ : [ equi ] weakenCtx [] ⊢ t₁ ∈ τ₁) τ₂ →
-                     unerase (ty₁ [/⊢tmTp τ₂ ]) ≡ unerase ty₁ [/tmTp τ₂ ]
-
 unerase-eval : ∀ {t₁ t₂ : Term 0 0} {τ : Type 0}→
                 {ty₁ : [ equi ] [] ⊢ t₁ ∈ τ} → {ty₂ : [ equi ] [] ⊢ t₂ ∈ τ} →
                 ty₁ ⟶d ty₂ →
                 unerase ty₁ ⟶t unerase ty₂
 unerase-eval (beta {a = a} ty₁ ty₂ vty₂) =
-  subst₂ _⟶t_ (cong (λ' _ _ ·_) 
+  subst₂ _⟶t_ (cong (λ' _ _ ·_)
     (sym (unerase-vty vty₂)))
     (trans (cong (λ t → unerase ty₁ [/tmTm t ]) (sym (unerase-vty vty₂))) (sym (unerase-[/⊢tmTm] ty₁ ty₂)))
     beta

@@ -117,6 +117,7 @@ module TermTypeLemmas where
   /-↑⋆ ρ₁ ρ₂ hyp i (Λ t)        = cong Λ      (/-↑⋆ ρ₁ ρ₂ hyp (1 + i) t)
   /-↑⋆ ρ₁ ρ₂ hyp i (λ' a t)     =
     cong₂ λ'     (T./-↑⋆ ρ₁ ρ₂ hyp i a)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
+    
   -- /-↑⋆ ρ₁ ρ₂ hyp i (μ a t)      =
   --   cong₂ μ      (T./-↑⋆ ρ₁ ρ₂ hyp i a)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
   /-↑⋆ ρ₁ ρ₂ hyp i (t [ b ])    =

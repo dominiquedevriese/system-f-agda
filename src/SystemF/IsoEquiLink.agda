@@ -1,12 +1,17 @@
 module SystemF.IsoEquiLink where
 
-open import Data.Nat using (suc; zero)
-open import Data.Vec using ([]; _∷_)
+open import Data.Fin using (Fin; zero; suc; inject+)
+open import Data.Fin.Substitution using (Sub; Lift; module VarSubst)
+open import Data.Fin.Substitution.Lemmas using ()
+open import Data.Nat using (ℕ; suc; zero)
+open import Data.Vec using ([]; _∷_; map)
+open import Data.Vec.Properties using (lookup-map; map-∘; map-cong)
 open import Data.Sum using (_⊎_)
 open import Data.Product using (∃; _,_)
 open import Data.Maybe as Maybe using (Maybe; just; nothing)
 open import Data.Maybe.Relation.Unary.All as MaybeAll using (just; nothing)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; subst; cong₂; subst₂; sym; trans)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; subst; cong₂; subst₂; sym; trans; module ≡-Reasoning)
+open import Function using (_∘_)
 
 open import SystemF.WtTerm
 open import SystemF.Term
@@ -57,10 +62,99 @@ erase-⌜⌝ (Λ x) = refl
 erase-⌜⌝ (λ' x x₁) = refl
 erase-⌜⌝ (fold x v) = erase-⌜⌝ v
 
-postulate
-  erase-[/tmTp] : ∀ (t : Term 0 1) {a} → erase t [/tmTp a ] ≡ erase (t [/tmTp a ])
-  erase-[/tmTm] : ∀ (t₁ : Term 1 0) (t₂ : Term 0 0) → erase t₁ [/tmTm erase t₂ ] ≡ erase (t₁ [/tmTm t₂ ])
-  erase-[/tmVal] : ∀ (t₁ : Term 1 0) (v₂ : Val 0 0) → erase t₁ [/tmTm ⌜ erase-val v₂ ⌝ ] ≡ erase (t₁ [/tmTm ⌜ v₂ ⌝ ])
+module TermTypeAppErase {T : ℕ → Set} (l : Lift T Type) where
+  open Lift l hiding (var)
+  open TypeSubst.TypeApp l renaming (_/_ to _/tp_)
+  open TermTypeSubst.TermTypeApp l using (_/_)
+
+  erase-sub : ∀ {m n k} (t : Term m n) (σ : Sub T n k) → erase t / σ ≡ erase (t / σ)
+  erase-sub (var x) σ = refl
+  erase-sub (Λ t) σ = cong Λ (erase-sub t (σ ↑))
+  erase-sub (λ' a t) σ = cong (λ' (a /tp σ)) (erase-sub t σ)
+  erase-sub (t [ τ ]) σ = cong (_[ τ /tp σ ]) (erase-sub t σ)
+  erase-sub (t₁ · t₂) σ = cong₂ _·_ (erase-sub t₁ σ) (erase-sub t₂ σ)
+  erase-sub (fold τ t) σ = erase-sub t σ
+  erase-sub (unfold τ t) σ = erase-sub t σ
+
+erase-[/tmTp] : ∀ (t : Term 0 1) {a} → erase t [/tmTp a ] ≡ erase (t [/tmTp a ])
+erase-[/tmTp] t {τ} = erase-sub t (sub τ)
+  where open TypeSubst using (termLift; sub)
+        open TermTypeAppErase termLift
+
+erase-weakenType : ∀ {m n} (t : Term m n) → TermTypeLemmas.weaken (erase t) ≡ erase (TermTypeLemmas.weaken t)
+erase-weakenType t = erase-sub t VarSubst.wk
+  where open TypeSubst using (varLift)
+        open TermTypeAppErase varLift
+
+open TermTermSubst using (TermLift; TermSub; termLift)
+
+module TermTermAppErase where
+  open TermLift termLift
+  open TermTermSubst using (Fin′; module TermTermApp; varLift; weaken)
+  open TermLift varLift using () renaming (_↑tp to _↑tpvar; _↑tm to _↑tmvar)
+  open TermTermApp varLift using () renaming (_/_ to _/var_)
+  open TermTermApp termLift using (_/_)
+
+  erase-sub-var : ∀ {m n k} (t : Term m n) (σ : TermSub Fin′ m n k) → erase t /var σ ≡ erase (t /var σ)
+  erase-sub-var (var x) σ = refl
+  erase-sub-var {n = n} (Λ t) σ = cong Λ (erase-sub-var t (_↑tpvar {n = n} σ))
+  erase-sub-var {n = n} (λ' a t) σ = cong (λ' a) (erase-sub-var t (_↑tmvar {n = n} σ))
+  erase-sub-var (t [ τ ]) σ = cong (_[ τ ]) (erase-sub-var t σ)
+  erase-sub-var (t₁ · t₂) σ = cong₂ _·_ (erase-sub-var t₁ σ) (erase-sub-var t₂ σ)
+  erase-sub-var (fold τ t) σ = erase-sub-var t σ
+  erase-sub-var (unfold τ t) σ = erase-sub-var t σ
+
+  erase-weaken : ∀ {m n} (t : Term m n) → weaken (erase t) ≡ erase (weaken t)
+  erase-weaken t = erase-sub-var t VarSubst.wk
+
+  erase-sub : ∀ {m n k} (t : Term m n) (σ : TermSub Term m n k) → erase t / map erase σ ≡ erase (t / σ)
+  erase-sub (var x) σ = lookup-map x erase σ
+  erase-sub (Λ t) σ = cong Λ (trans (cong (erase t /_) h) (erase-sub t (σ ↑tp)))
+    where
+      open ≡-Reasoning
+      h : map TermTypeLemmas.weaken (map erase σ) ≡
+          map erase (map TermTypeLemmas.weaken σ)
+      h = begin
+            map TermTypeLemmas.weaken (map erase σ)
+              ≡⟨ sym (map-∘ TermTypeLemmas.weaken erase σ) ⟩
+            map (TermTypeLemmas.weaken ∘ erase) σ
+              ≡⟨ map-cong (λ t → erase-weakenType t) σ ⟩
+            map (erase ∘ TermTypeLemmas.weaken) σ
+              ≡⟨ map-∘ erase TermTypeLemmas.weaken σ ⟩
+            map erase (map TermTypeLemmas.weaken σ) ∎
+  erase-sub (λ' a t) σ = cong (λ' a) (trans (cong (erase t /_) h) (erase-sub t (σ ↑tm)))
+    where
+      open ≡-Reasoning
+      open TermTermSubst using (_↑; weaken)
+      h : map erase σ ↑ ≡ map erase (σ ↑)
+      h = cong (_∷_ (var zero))
+          (begin
+            map weaken (map erase σ) ≡⟨ sym (map-∘ weaken erase σ) ⟩
+            map (weaken ∘ erase) σ ≡⟨ map-cong (λ t → erase-weaken t) σ ⟩
+            map (erase ∘ weaken) σ ≡⟨ map-∘ erase weaken σ ⟩
+            map erase (map weaken σ)
+          ∎)
+  erase-sub (t [ τ ]) σ = cong (_[ τ ]) (erase-sub t σ)
+  erase-sub (t₁ · t₂) σ = cong₂ _·_ (erase-sub t₁ σ) (erase-sub t₂ σ)
+  erase-sub (fold τ t) σ = erase-sub t σ
+  erase-sub (unfold τ t) σ = erase-sub t σ
+
+erase-[/tmTm] : ∀ (t₁ : Term 1 0) {t₂} → erase t₁ [/tmTm erase t₂ ] ≡ erase (t₁ [/tmTm t₂ ])
+erase-[/tmTm] t {t₂} = erase-sub t (sub t₂) -- erase-sub t (sub t₂)
+  where open TermTermSubst using (sub)
+        open TermTermAppErase
+
+erase-[/tmVal] : ∀ (t₁ : Term 1 0) (v₂ : Val 0 0) →
+                 erase t₁ [/tmTm ⌜ erase-val v₂ ⌝ ] ≡ erase (t₁ [/tmTm ⌜ v₂ ⌝ ])
+erase-[/tmVal] t₁ v₂ =
+  begin
+    erase t₁ [/tmTm ⌜ erase-val v₂ ⌝ ]
+      ≡⟨ cong (erase t₁ [/tmTm_]) (sym (erase-⌜⌝ v₂)) ⟩
+    erase t₁ [/tmTm erase ⌜ v₂ ⌝ ]
+      ≡⟨ erase-[/tmTm] t₁ ⟩
+    erase (t₁ [/tmTm ⌜ v₂ ⌝ ])
+  ∎
+  where open ≡-Reasoning
 
 erase-eval : ∀ {t₁ t₂} → t₁ ⟶t t₂ → erase t₁ ⟶t* erase t₂
 erase-eval (App eval) = App⟶t* (erase-eval eval)

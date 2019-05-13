@@ -28,7 +28,7 @@ data Term (m n : ℕ) : Set where
   var     : (x : Fin m)                   → Term m n  -- term variable
   Λ       : Term m (1 + n)                → Term m n  -- type abstraction
   λ'      : Type n       → Term (1 + m) n → Term m n  -- term abstraction
-  μ       : Type n       → Term (1 + m) n → Term m n  -- recursive term
+  -- μ       : Type n       → Term (1 + m) n → Term m n  -- recursive term
   _[_]    : Term m n     → Type n         → Term m n  -- type application
   _·_     : Term m n     → Term m n       → Term m n  -- term application
   fold    : Type (1 + n) → Term m n       → Term m n  -- fold recursive type
@@ -65,7 +65,7 @@ module TermTypeSubst where
     var x      / σ = var x
     Λ t        / σ = Λ (t / σ ↑)
     λ' a t     / σ = λ' (a /tp σ) (t / σ)
-    μ a t      / σ = μ (a /tp σ) (t / σ)
+    -- μ a t      / σ = μ (a /tp σ) (t / σ)
     t [ a ]    / σ = (t / σ) [ a /tp σ ]
     s · t      / σ = (s / σ) · (t / σ)
     fold a t   / σ = fold (a /tp σ ↑) (t / σ)
@@ -117,8 +117,8 @@ module TermTypeLemmas where
   /-↑⋆ ρ₁ ρ₂ hyp i (Λ t)        = cong Λ      (/-↑⋆ ρ₁ ρ₂ hyp (1 + i) t)
   /-↑⋆ ρ₁ ρ₂ hyp i (λ' a t)     =
     cong₂ λ'     (T./-↑⋆ ρ₁ ρ₂ hyp i a)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
-  /-↑⋆ ρ₁ ρ₂ hyp i (μ a t)      =
-    cong₂ μ      (T./-↑⋆ ρ₁ ρ₂ hyp i a)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
+  -- /-↑⋆ ρ₁ ρ₂ hyp i (μ a t)      =
+  --   cong₂ μ      (T./-↑⋆ ρ₁ ρ₂ hyp i a)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
   /-↑⋆ ρ₁ ρ₂ hyp i (t [ b ])    =
     cong₂ _[_]     (/-↑⋆ ρ₁ ρ₂ hyp i t)     (T./-↑⋆ ρ₁ ρ₂ hyp i b)
   /-↑⋆ ρ₁ ρ₂ hyp i (s · t)      =
@@ -166,7 +166,7 @@ module TermTermSubst where
     var x      / ρ = lift (lookup ρ x)
     Λ t        / ρ = Λ (t / ρ ↑tp)
     λ' a t     / ρ = λ' a (t / ρ ↑tm)
-    μ a t      / ρ = μ a (t / ρ ↑tm)
+    -- μ a t      / ρ = μ a (t / ρ ↑tm)
     t [ a ]    / ρ = (t / ρ) [ a ]
     s · t      / ρ = (s / ρ) · (t / ρ)
     fold a t   / ρ = fold a (t / ρ)

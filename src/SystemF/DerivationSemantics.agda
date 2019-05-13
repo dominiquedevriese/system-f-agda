@@ -9,7 +9,7 @@ open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 open import SystemF.WtTerm
 open import SystemF.Term
 open import SystemF.Type
-open import SystemF.Reduction
+open import SystemF.ReductionJudgement
 
 open TypeSubst using () renaming (_[/_]  to _[/tp_])
 open CtxSubst  using () renaming (weaken to weakenCtx)
@@ -49,8 +49,10 @@ data _⟶d_ {s} : ∀ {t₁ t₂ : Term 0 0} {τ : Type 0} → [ s ] [] ⊢ t₁
                ValueDeriv ty →
                unfold a (fold a ty) ⟶d ty
   fold : ∀ {t t′ a} {ty : [ s ] [] ⊢ t ∈ a [/tp μ a ]} {ty′ : [ s ] [] ⊢ t′ ∈ a [/tp μ a ]} →
+           ty ⟶d ty′ →
            fold a ty ⟶d fold a ty′
   unfold : ∀ {t t′ a} {ty : [ s ] [] ⊢ t ∈ μ a} {ty′ : [ s ] [] ⊢ t′ ∈ μ a} →
+           ty ⟶d ty′ →
            unfold a ty ⟶d unfold a ty′
 
 data _⟶d*_ {s} {τ} {t₁} (ty₁ : [ s ] [] ⊢ t₁ ∈ τ) : ∀ {t₂} (ty₂ : [ s ] [] ⊢ t₂ ∈ τ) → Set where
@@ -61,13 +63,13 @@ data _⟶d*_ {s} {τ} {t₁} (ty₁ : [ s ] [] ⊢ t₁ ∈ τ) : ∀ {t₂} (ty
 fold-d* : ∀ {s t t′ a} {ty : [ s ] [] ⊢ t ∈ a [/tp μ a ]} {ty′ : [ s ] [] ⊢ t′ ∈ a [/tp μ a ]} →
           ty ⟶d* ty′ → fold a ty ⟶d* fold a ty′
 fold-d* refl⟶d* = refl⟶d*
-fold-d* (underlying⟶d* eval) = underlying⟶d* fold
+fold-d* (underlying⟶d* eval) = underlying⟶d* (fold eval)
 fold-d* (trans⟶d* eval₁ eval₂) = trans⟶d* (fold-d* eval₁) (fold-d* eval₂)
 
 unfold-d* : ∀ {s t t′ a} {ty : [ s ] [] ⊢ t ∈ μ a} {ty′ : [ s ] [] ⊢ t′ ∈ μ a} →
           ty ⟶d* ty′ → unfold a ty ⟶d* unfold a ty′
 unfold-d* refl⟶d* = refl⟶d*
-unfold-d* (underlying⟶d* eval) = underlying⟶d* unfold
+unfold-d* (underlying⟶d* eval) = underlying⟶d* (unfold eval)
 unfold-d* (trans⟶d* eval₁ eval₂) = trans⟶d* (unfold-d* eval₁) (unfold-d* eval₂)
 
 App-d* : ∀ {s t t′ τ b} {ty : [ s ] [] ⊢ t ∈ ∀' τ} {ty′ : [ s ] [] ⊢ t′ ∈ ∀' τ} →
@@ -137,24 +139,32 @@ normalizeDeriv-eval* {equi} {fold x v} (unfold a ty) with normalizeDeriv ty | no
 normalizeDeriv-eval* {equi} {fold x v} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶d* (unfold-d* evals) (underlying⟶d* (unfoldFold tyV′))
 
 
-stepResult : Result 0 0 → Term 0 0
-stepResult (continue t) = t
-stepResult (done v) = ⌜ v ⌝
+-- stepResult : Result 0 0 → Term 0 0
+-- stepResult (continue t) = t
+-- stepResult (done v) = ⌜ v ⌝
 
-preservation : ∀ {s τ t} (ty : [ s ] [] ⊢ t ∈ τ) →
-               MaybeAll.All (λ res → [ s ] [] ⊢ stepResult res ∈ τ) (step t)
-preservation {t = t} ty with step t | ⊢step ty
-preservation {t = t} ty | just .(continue _) | just (⊢continue ty′) = just ty′
-preservation {t = t} ty | just .(done _) | just (⊢done ty′) = just ⊢⌜ ty′ ⌝
-preservation {t = t} ty | Data.Maybe.nothing | ty′ = MaybeAll.nothing
+preservation : ∀ {s τ t₁ t₂} (ty : [ s ] [] ⊢ t₁ ∈ τ) →
+               t₁ ⟶t t₂ →
+               [ s ] [] ⊢ t₂ ∈ τ
+preservation (ty [ b ]) (App eval) = preservation ty eval [ b ]
+preservation (ty [ b ]) Beta with normalizeDeriv ty | normalizeDeriv-Value ty
+preservation (ty [ b ]) Beta | .(Λ ty₁) | Λ ty₁ = ty₁ [/⊢tmTp b ]
+preservation (ty₁ · ty₂) (app₁ eval) = preservation ty₁ eval · ty₂
+preservation (ty₁ · ty₂) (app₂ eval) = normalizeDeriv ty₁ · preservation ty₂ eval
+preservation (ty₁ · ty₂) beta with normalizeDeriv ty₁ | normalizeDeriv-Value ty₁ | normalizeDeriv ty₂ | normalizeDeriv-Value ty₂
+preservation (ty₁ · ty₂) beta | .(λ' _ ty₁′) | λ' ty₁′ | ty₂′ | vty₂′ = ty₁′ [/⊢tmTm ty₂′ ]
+preservation {s = iso} (fold a ty) (fold eval) = fold a (preservation ty eval)
+preservation {iso} (unfold a ty) (unfold eval) = unfold a (preservation ty eval)
+preservation {iso} (unfold a (fold .a ty)) unfoldFold = ty
+preservation {s = equi} (fold a ty) eval = fold a (preservation ty eval)
+preservation {s = equi} (unfold a ty) eval = unfold a (preservation ty eval)
 
-preservation* : ∀ k {s τ t} (ty : [ s ] [] ⊢ t ∈ τ) →
-                MaybeAll.All (λ res → [ s ] [] ⊢ stepResult res ∈ τ) (step* k t)
-preservation* zero {t = t} ty = just ty
-preservation* (suc k) {t = t} ty with step t | preservation ty
-preservation* (suc k) {t = t} ty | nothing | nothing = nothing
-preservation* (suc k) {t = t} ty | just (continue t′) | just ty′ = preservation* k ty′
-preservation* (suc k) {t = t} ty | just (done v) | just ty′ = just ty′
+preservation* : ∀ {s τ t₁ t₂} (ty : [ s ] [] ⊢ t₁ ∈ τ) →
+               t₁ ⟶t* t₂ →
+               [ s ] [] ⊢ t₂ ∈ τ
+preservation* ty refl⟶t* = ty
+preservation* ty (underlying⟶t* eval) = preservation ty eval
+preservation* ty (trans⟶t* evals₁ evals₂) = preservation* (preservation* ty evals₁) evals₂
 
 ⊢⌜⌝-ValueDeriv : ∀ {s v τ} → (ty : [ s ] [] ⊢val v ∈ τ) → ValueDeriv (⊢⌜ ty ⌝)
 ⊢⌜⌝-ValueDeriv (Λ ty) = Λ ty
@@ -162,51 +172,34 @@ preservation* (suc k) {t = t} ty | just (done v) | just ty′ = just ty′
 ⊢⌜⌝-ValueDeriv {s = iso} (fold a ty) = fold (⊢⌜⌝-ValueDeriv ty)
 ⊢⌜⌝-ValueDeriv {s = equi} (fold a ty) = fold (⊢⌜⌝-ValueDeriv ty)
 
-derivFollows : ∀ {τ t} (ty : [ equi ] [] ⊢ t ∈ τ) →
-               MaybeAllAll (λ ty′ → ty ⟶d* ty′) (preservation ty)
-derivFollows {t = t} (fold a ty) with step t | ⊢step ty | derivFollows ty
-derivFollows {t = t} (fold a ty) | .(just (continue _)) | just (⊢continue ty′) | just evals =
-  just (fold-d* evals)
-derivFollows {t = t} (fold a ty) | .(just (done _)) | just (⊢done ty′) | just evals =
-  just (fold-d* evals)
-derivFollows {t = t} (fold a ty) | .nothing | nothing | _ = nothing
-derivFollows {t = t} (unfold a ty) with step t | ⊢step ty | derivFollows ty
-derivFollows {t = t} (unfold a ty) | .(just (continue _)) | just (⊢continue ty′) | just evals =
-  just (unfold-d* evals)
-derivFollows {t = t} (unfold a ty) | .(just (done _)) | just (⊢done (fold .a ty′)) | just evals =
-  just (trans⟶d* (unfold-d* evals)
-    (underlying⟶d* (unfoldFold (⊢⌜⌝-ValueDeriv ty′))))
-derivFollows {t = t} (unfold a ty) | .nothing | nothing | _ = nothing
-derivFollows {t = Λ t} (Λ ty) = just refl⟶d*
-derivFollows {t = λ' x t} (λ' .x ty) = just refl⟶d*
--- derivFollows {t = μ x t} (μ .x ty) = {!!}
-derivFollows {t = t [ x ]} (ty [ .x ]) with step t | ⊢step ty | derivFollows ty
-derivFollows {_} {t [ x ]} (ty [ .x ]) | .(just (continue _)) | just (⊢continue ty′) | just evals =
-  just (App-d* evals)
-derivFollows {_} {t [ x ]} (ty [ .x ]) | .(just (done (Λ _))) | just (⊢done (Λ x₁)) | just evals =
-  just (trans⟶d* (App-d* evals) (underlying⟶d* Beta))
-derivFollows {_} {t [ x ]} (ty [ .x ]) | .nothing | nothing | _ = nothing
-derivFollows {t = t₁ · t₂} (ty₁ · ty₂) with step t₁ | ⊢step ty₁ | derivFollows ty₁
-derivFollows {_} {t₁ · t₂} (ty₁ · ty₂) | .nothing | nothing | _ = nothing
-derivFollows {_} {t₁ · t₂} (ty₁ · ty₂) | .(just (continue _)) | just (⊢continue ty₁′) | just evals₁ =
-  just (app₁-d* evals₁)
-derivFollows {_} {t₁ · t₂} (ty₁ · ty₂) | .(just (done (λ' a _))) | just (⊢done (λ' a ty₁′)) | just evals₁ with step t₂ | ⊢step ty₂ | derivFollows ty₂
-derivFollows {_} {t₁ · t₂} (ty₁ · ty₂) | .(just (done (λ' a _))) | just (⊢done (λ' a ty₁′)) | just evals₁ | .nothing | nothing | _ = nothing
-derivFollows {_} {t₁ · t₂} (ty₁ · ty₂) | .(just (done (λ' a _))) | just (⊢done (λ' a ty₁′)) | just evals₁ | .(just (continue _)) | just (⊢continue ty₂′) | just evals₂ =
-  just (trans⟶d* (app₁-d* evals₁)
-    (app₂-d* (λ' ty₁′) evals₂))
-derivFollows {_} {t₁ · t₂} (ty₁ · ty₂) | .(just (done (λ' a _))) | just (⊢done (λ' a ty₁′)) | just evals₁ | .(just (done _)) | just (⊢done ty₂′) | just evals₂ =
-  just (trans⟶d* (app₁-d* evals₁)
+
+derivFollows : ∀ {τ t₁ t₂} (ty : [ equi ] [] ⊢ t₁ ∈ τ) →
+               (eval : t₁ ⟶t t₂) →
+               ty ⟶d* preservation ty eval
+derivFollows (ty [ b ]) (App eval) = App-d* (derivFollows ty eval)
+derivFollows (ty [ b ]) Beta with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-eval* ty
+derivFollows (ty [ b ]) Beta | .(Λ ty′) | Λ ty′ | evals =
+  trans⟶d* (App-d* evals) (underlying⟶d* Beta)
+derivFollows (ty₁ · ty₂) (app₁ eval) = app₁-d* (derivFollows ty₁ eval)
+derivFollows (ty₁ · ty₂) (app₂ eval) with normalizeDeriv ty₁ | normalizeDeriv-Value ty₁ | normalizeDeriv-eval* ty₁
+derivFollows (ty₁ · ty₂) (app₂ eval) | ty₁′ | vty₁′ | evals =
+  trans⟶d* (app₁-d* evals) (app₂-d* vty₁′ (derivFollows ty₂ eval))
+derivFollows (ty₁ · ty₂) beta
+  with normalizeDeriv ty₁ | normalizeDeriv-Value ty₁ | normalizeDeriv-eval* ty₁
+     | normalizeDeriv ty₂ | normalizeDeriv-Value ty₂ | normalizeDeriv-eval* ty₂
+derivFollows (ty₁ · ty₂) beta
+  | .(λ' _ ty₁′) | λ' ty₁′ | evals₁ | ty₂′ | vty₂′ | evals₂ =
+  trans⟶d* (app₁-d* evals₁)
     (trans⟶d* (app₂-d* (λ' ty₁′) evals₂)
-    (underlying⟶d* (beta ty₁′ ⊢⌜ ty₂′ ⌝ (⊢⌜⌝-ValueDeriv ty₂′)))))
+    (underlying⟶d* (beta ty₁′ ty₂′ vty₂′)))
+derivFollows (fold a ty) eval = fold-d* (derivFollows ty eval)
+derivFollows (unfold a ty) eval = unfold-d* (derivFollows ty eval)
 
+derivFollows* : ∀ {τ t₁ t₂} (ty : [ equi ] [] ⊢ t₁ ∈ τ) →
+               (evals : t₁ ⟶t* t₂) →
+               ty ⟶d* preservation* ty evals
+derivFollows* ty refl⟶t* = refl⟶d*
+derivFollows* ty (underlying⟶t* eval) = derivFollows ty eval
+derivFollows* ty (trans⟶t* evals₁ evals₂) =
+  trans⟶d* (derivFollows* ty evals₁) (derivFollows* (preservation* ty evals₁) evals₂)
 
-derivFollows* : ∀ k {τ t} (ty : [ equi ] [] ⊢ t ∈ τ) →
-                MaybeAllAll (λ ty′ → ty ⟶d* ty′) (preservation* k ty)
-derivFollows* zero ty = just refl⟶d*
-derivFollows* (suc k) {t = t} ty with step t | preservation ty | derivFollows ty
-derivFollows* (suc k) {t = t} ty | nothing | nothing | _ = nothing
-derivFollows* (suc k) {t = t} ty | just (continue t′) | just ty′ | just evals with step* k t′ | preservation* k ty′ | derivFollows* k ty′
-derivFollows* (suc k) {t = t} ty | just (continue t′) | just ty′ | just evals | .nothing | nothing | _ = nothing
-derivFollows* (suc k) {t = t} ty | just (continue t′) | just ty′ | just evals | .(just _) | just x | just evals′ = just (trans⟶d* evals evals′)
-derivFollows* (suc k) {t = t} ty | just (done v) | just ty′ | just evals = just evals

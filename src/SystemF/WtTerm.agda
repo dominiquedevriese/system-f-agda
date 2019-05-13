@@ -106,6 +106,24 @@ data [_]_⊢val_∈_ (s : Style) {m n} (Γ : Ctx m n) : Val m n → Type n → S
 ⊢⌜_⌝ {s = iso} (fold a t) = fold a ⊢⌜ t ⌝
 ⊢⌜_⌝ {s = equi} (fold a t) = fold a ⊢⌜ t ⌝
 
+-- ⊢⌜⌝inv : ∀ {s m n} {Γ : Ctx m n} {v a} → [ s ] Γ ⊢ ⌜ v ⌝ ∈ a → [ s ] Γ ⊢val v ∈ a
+-- ⊢⌜⌝inv {v = v} tyV = h tyV refl
+--   where h : ∀ {s m n} {Γ : Ctx m n} {t v a} → [ s ] Γ ⊢ t ∈ a → t ≡ ⌜ v ⌝ → [ s ] Γ ⊢val v ∈ a
+--         h {iso} {v = fold .a v} (fold a tyV) refl = fold a (h tyV refl)
+--         h {s = equi} (fold a tyV) eq = fold a (h tyV eq)
+--         h {iso} {v = Λ x} (unfold a tyV) ()
+--         h {iso} {v = λ' x x₁} (unfold a tyV) ()
+--         h {iso} {v = fold x v} (unfold a tyV) ()
+--         h {s = equi} (unfold a tyV) eq = {!!}
+--         h {v = Λ x} (Λ ty) refl = Λ ty
+--         h {v = λ' .a t} (λ' a ty) refl = λ' a ty
+--         h {v = fold x v} (var x₁) ()
+--         h {v = fold x v} (Λ ty) ()
+--         h {v = fold x v} (λ' a ty) ()
+--         h {v = fold x v} (ty [ b ]) ()
+--         h {v = fold x v} (ty · ty₁) ()
+
+
 -- Collections of typing derivations for well-typed terms.
 data [_]_⊢ⁿ_∈_ (s : Style) {m n} (Γ : Ctx m n) :
   ∀ {k} → Vec (Term m n) k → Vec (Type n) k → Set where

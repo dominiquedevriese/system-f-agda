@@ -4,7 +4,7 @@ open import Data.Fin using (Fin; zero; suc; inject+)
 open import Data.Fin.Substitution using (Sub; Lift; module VarSubst)
 open import Data.Fin.Substitution.Lemmas using ()
 open import Data.Nat using (ℕ; suc; zero)
-open import Data.Vec using ([]; _∷_; map)
+open import Data.Vec using (Vec; []; _∷_; map; lookup)
 open import Data.Vec.Properties using (lookup-map; map-∘; map-cong)
 open import Data.Sum using (_⊎_)
 open import Data.Product using (∃; _,_)
@@ -21,12 +21,13 @@ open import SystemF.ReductionJudgement
 open import SystemF.DerivationSemantics
 
 open TypeSubst       using () renaming (_[/_]  to _[/tp_]; _/_ to _/tp_)
-open TermTypeSubst   using () renaming (_[/_]  to _[/tmTp_]; _/_ to _/tmTp_)
-open TermTermSubst   using () renaming (_[/_]  to _[/tmTm_])
-open WtTermTypeSubst using () renaming (_[/_]′ to _[/⊢tmTp_]; _/_ to _/⊢tmTp_)
-open WtTermTermSubst using () renaming (_[/_]  to _[/⊢tmTm_])
+open TermTypeSubst   using () renaming (_[/_]  to _[/tmTp_]; _/_ to _/tmTp_; weaken to weakenTmTp)
+open TermTermSubst   using (TermSub) renaming (_[/_]  to _[/tmTm_]; _/_ to _/tm_; weaken to weakenTmTm; _/Var_ to _/Var-tm_)
+open WtTermTypeSubst using () renaming (_[/_]′ to _[/⊢tmTp_]; _/_ to _/⊢tmTp_; weaken to weaken-⊢tmTp; weakenAll to weakenAll-⊢tmTp)
+open WtTermTermSubst using () renaming (_[/_]  to _[/⊢tmTm_]; weakenAll to weakenAll-⊢tmTm; weaken to weaken-⊢tmTm; _/Var_ to _/⊢Var_)
 
 open CtxSubst  using () renaming (weaken to weakenCtx)
+open CtxLemmas using () renaming (_/Var_ to _/CtxVar_)
 
 
 erase : ∀ {m n} → Term m n → Term m n
@@ -308,11 +309,98 @@ unerase-[/⊢tmTp] : ∀ {t₁ : Term 0 1} {τ₁}
 unerase-[/⊢tmTp] ty₁ τ₂ = unerase-tysub (sub τ₂) ty₁
   where open TypeSubst using (sub)
 
-postulate
-  unerase-[/⊢tmTm] : ∀ {t₁ : Term 1 0} {t₂ : Term 0 0} {τ₁ τ₂}
-                     (ty₁ : [ equi ] τ₁ ∷ [] ⊢ t₁ ∈ τ₂) →
-                     (ty₂ : [ equi ] [] ⊢ t₂ ∈ τ₁) →
-                     unerase (ty₁ [/⊢tmTm ty₂ ]) ≡ unerase ty₁ [/tmTm unerase ty₂ ]
+
+open WtTermTermSubst using ([_]_⇒_⊢_) renaming (_/_ to _/⊢tm_; _↑ to _↑⊢tm; sub to sub-⊢tmTm)
+
+unerase-tmsub : ∀ {m n k : ℕ} {Γ : Ctx m n} {Δ : Ctx k n} {ρ : TermSub Term m n k} →
+                [ equi ] Γ ⇒ Δ ⊢ ρ → TermSub Term m n k
+unerase-tmsub [] = []
+unerase-tmsub (ty ∷ tyρ) = unerase ty ∷ unerase-tmsub tyρ
+
+unerase-lookup-⊢ : ∀ {m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k} {as : Vec (Type n) k} →
+                   (x : Fin k) → (tyρ : [ equi ] Γ ⊢ⁿ ts ∈ as) →
+                   unerase (lookup-⊢ x tyρ) ≡ lookup (unerase-tmsub tyρ) x
+unerase-lookup-⊢ zero (ty ∷ tyρ) = refl
+unerase-lookup-⊢ (suc x) (ty ∷ tyρ) = unerase-lookup-⊢ x tyρ
+
+unerase-⊢subst : ∀ {m n} {Γ₁ Γ₂ : Ctx m n} {t₁ t₂ : Term m n} {a₁ a₂ : Type n} →
+                 (eqΓ : Γ₁ ≡ Γ₂) → (eqt : t₁ ≡ t₂) → (eqτ : a₁ ≡ a₂) →
+                 (ty : [ equi ] Γ₁ ⊢ t₁ ∈ a₁) →
+                 unerase (⊢subst eqΓ eqt eqτ ty) ≡ unerase ty
+unerase-⊢subst refl refl refl hyp = refl
+
+unerase-weaken-⊢tmTp : ∀ {n} {k} {t : Term k n} {a : Type n}
+                         {Δ : Ctx k n} (ty : [ equi ] Δ ⊢ t ∈ a) →
+                       unerase (weaken-⊢tmTp ty) ≡ weakenTmTp (unerase ty)
+unerase-weaken-⊢tmTp {t = t} {a = a} ty =
+  trans (unerase-⊢subst (sym map-weaken) (/-wkTmTp t) (/-wk {t = a}) (ty /⊢tmTp wk))
+    (trans (unerase-tysub wk ty)
+      (/-wkTmTp (unerase ty)))
+  where open TypeLemmas using (map-weaken; /-wk; wk)
+        open TermTypeLemmas renaming (/-wk to /-wkTmTp)
+
+unerase-tmsub-weakenAll-⊢tmTp :
+  ∀ {n} {m} {k} {Γ : Ctx m n} {Δ : Ctx k n}
+    {ρ : Vec (Term k n) m} (tyρ : [ equi ] Δ ⊢ⁿ ρ ∈ Γ) →
+    unerase-tmsub (weakenAll-⊢tmTp tyρ) ≡ map weakenTmTp (unerase-tmsub tyρ)
+unerase-tmsub-weakenAll-⊢tmTp [] = refl
+unerase-tmsub-weakenAll-⊢tmTp (ty ∷ tyρ) = cong₂ _∷_ (unerase-weaken-⊢tmTp ty) (unerase-tmsub-weakenAll-⊢tmTp tyρ)
+
+unerase-/⊢Var : ∀ {m n k} {Γ : Ctx k n} {t : Term m n} {a : Type n}
+               (ρ : Sub Fin m k) → (ty : [ equi ] ρ /CtxVar Γ ⊢ t ∈ a) →
+               unerase {Γ = Γ} (ρ /⊢Var ty) ≡ unerase ty /Var-tm ρ
+unerase-/⊢Var {Γ = Γ} ρ (var x) =
+  unerase-⊢substTp (sym (CtxLemmas./Var-lookup x ρ Γ)) (var (lookup ρ x)) 
+unerase-/⊢Var {Γ = Γ} ρ (Λ ty) =
+  cong Λ (
+    trans (unerase-/⊢Var ρ (⊢substCtx (CtxLemmas./Var-weaken ρ Γ) ty))
+      (cong (_/Var-tm ρ) (unerase-⊢substCtx (CtxLemmas./Var-weaken ρ Γ) ty)))
+unerase-/⊢Var {Γ = Γ} ρ (λ' a ty) =
+  cong (λ' a) (
+    trans (unerase-/⊢Var (ρ VarSubst.↑) (⊢substCtx (CtxLemmas./Var-∷ a ρ Γ) ty))
+      (cong (_/Var-tm (ρ VarSubst.↑)) (unerase-⊢substCtx (CtxLemmas./Var-∷ a ρ Γ) ty)))
+unerase-/⊢Var ρ (ty [ b ]) =
+  cong (_[ b ]) (unerase-/⊢Var ρ ty)
+unerase-/⊢Var ρ (ty₁ · ty₂) = cong₂ _·_ (unerase-/⊢Var ρ ty₁) (unerase-/⊢Var ρ ty₂)
+unerase-/⊢Var ρ (fold a ty) = cong (fold a) (unerase-/⊢Var ρ ty)
+unerase-/⊢Var ρ (unfold a ty) = cong (unfold a) (unerase-/⊢Var ρ ty)
+
+unerase-weaken-⊢tmTm : ∀ {n} {k} {t : Term k n} {a : Type n} {b : Type n}
+                         {Δ : Ctx k n} (ty : [ equi ] Δ ⊢ t ∈ a) →
+                       unerase (weaken-⊢tmTm {b = b} ty) ≡ weakenTmTm (unerase ty)
+unerase-weaken-⊢tmTm {b = b} {Δ = Δ} ty =
+  trans (unerase-/⊢Var VarSubst.wk (⊢substCtx (CtxLemmas.wkVar-/Var-∷ Δ b) ty))
+    (cong (_/Var-tm VarSubst.wk) (unerase-⊢substCtx (CtxLemmas.wkVar-/Var-∷ Δ b) ty))
+
+unerase-tmsub-weakenAll-⊢tmTm :
+  ∀ {n} {m} {k} {Γ : Ctx m n} {Δ : Ctx k n} {b : Type n}
+    {ρ : Vec (Term k n) m} (tyρ : [ equi ] Δ ⊢ⁿ ρ ∈ Γ) →
+    unerase-tmsub (weakenAll-⊢tmTm {b = b} tyρ) ≡ map weakenTmTm (unerase-tmsub tyρ)
+unerase-tmsub-weakenAll-⊢tmTm [] = refl
+unerase-tmsub-weakenAll-⊢tmTm (ty ∷ tyρ) = cong₂ _∷_ (unerase-weaken-⊢tmTm ty) (unerase-tmsub-weakenAll-⊢tmTm tyρ)
+
+unerase-/⊢tm : ∀ {m n k} {Γ : Ctx m n} {Δ : Ctx k n} {t a ρ} →
+                (ty : [ equi ] Γ ⊢ t ∈ a) → (tyρ : [ equi ] Γ ⇒ Δ ⊢ ρ) →
+                unerase (ty /⊢tm tyρ) ≡ unerase ty /tm unerase-tmsub tyρ
+unerase-/⊢tm (var x) tyρ = unerase-lookup-⊢ x tyρ
+unerase-/⊢tm (Λ ty) tyρ = cong Λ (
+                          trans (unerase-/⊢tm ty (weakenAll-⊢tmTp tyρ))
+                          (cong (unerase ty /tm_) (unerase-tmsub-weakenAll-⊢tmTp tyρ)))
+unerase-/⊢tm (λ' a ty) tyρ =
+  cong (λ' a) (
+    trans (unerase-/⊢tm ty (tyρ ↑⊢tm))
+      (cong (unerase ty /tm_) (cong (var zero ∷_) (unerase-tmsub-weakenAll-⊢tmTm tyρ))))
+unerase-/⊢tm (ty [ b ]) tyρ = cong (_[ b ]) (unerase-/⊢tm ty tyρ)
+unerase-/⊢tm (ty₁ · ty₂) tyρ = cong₂ _·_ (unerase-/⊢tm ty₁ tyρ) (unerase-/⊢tm ty₂ tyρ)
+unerase-/⊢tm (fold a ty) tyρ = cong (fold a) (unerase-/⊢tm ty tyρ)
+unerase-/⊢tm (unfold a ty) tyρ = cong (unfold a) (unerase-/⊢tm ty tyρ)
+
+unerase-[/⊢tmTm] : ∀ {t₁ : Term 1 0} {t₂ : Term 0 0} {τ₁ τ₂}
+                  (ty₁ : [ equi ] τ₁ ∷ [] ⊢ t₁ ∈ τ₂) →
+                  (ty₂ : [ equi ] [] ⊢ t₂ ∈ τ₁) →
+                  unerase (ty₁ [/⊢tmTm ty₂ ]) ≡ unerase ty₁ [/tmTm unerase ty₂ ]
+unerase-[/⊢tmTm] ty₁ ty₂ = unerase-/⊢tm ty₁ (sub-⊢tmTm ty₂)
+
 unerase-eval : ∀ {t₁ t₂ : Term 0 0} {τ : Type 0}→
                 {ty₁ : [ equi ] [] ⊢ t₁ ∈ τ} → {ty₂ : [ equi ] [] ⊢ t₂ ∈ τ} →
                 ty₁ ⟶d ty₂ →

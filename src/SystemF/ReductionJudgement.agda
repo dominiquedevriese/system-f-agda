@@ -40,6 +40,16 @@ app₂⟶t* refl⟶t* = refl⟶t*
 app₂⟶t* (underlying⟶t* eval) = underlying⟶t* (app₂ eval)
 app₂⟶t* (trans⟶t* evals₁ evals₂) = trans⟶t* (app₂⟶t* evals₁) (app₂⟶t* evals₂)
 
+fold⟶t* : ∀ {t t′ a} → t ⟶t* t′ → fold a t ⟶t* fold a t′
+fold⟶t* refl⟶t* = refl⟶t*
+fold⟶t* (underlying⟶t* eval) = underlying⟶t* (fold eval)
+fold⟶t* (trans⟶t* evals₁ evals₂) = trans⟶t* (fold⟶t* evals₁) (fold⟶t* evals₂)
+
+unfold⟶t* : ∀ {t t′ a} → t ⟶t* t′ → unfold a t ⟶t* unfold a t′
+unfold⟶t* refl⟶t* = refl⟶t*
+unfold⟶t* (underlying⟶t* eval) = underlying⟶t* (unfold eval)
+unfold⟶t* (trans⟶t* evals₁ evals₂) = trans⟶t* (unfold⟶t* evals₁) (unfold⟶t* evals₂)
+
 data _⇓ (t : Term 0 0) : Set where
   term : ∀ v → t ⟶t* ⌜ v ⌝ → t ⇓
 

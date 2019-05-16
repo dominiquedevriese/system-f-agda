@@ -141,7 +141,7 @@ module TermTermAppErase where
   erase-sub (unfold τ t) σ = erase-sub t σ
 
 erase-[/tmTm] : ∀ (t₁ : Term 1 0) {t₂} → erase t₁ [/tmTm erase t₂ ] ≡ erase (t₁ [/tmTm t₂ ])
-erase-[/tmTm] t {t₂} = erase-sub t (sub t₂) -- erase-sub t (sub t₂)
+erase-[/tmTm] t {t₂} = erase-sub t (sub t₂)
   where open TermTermSubst using (sub)
         open TermTermAppErase
 
@@ -200,7 +200,7 @@ erase-plug (unfold a ctx) = erase-plug ctx
 erase-context-ty : ∀ {mᵢ nᵢ mₒ nₒ} {C : Context mᵢ nᵢ mₒ nₒ}
                    {Γᵢ : Ctx mᵢ nᵢ} {τᵢ : Type nᵢ} {Γₒ : Ctx mₒ nₒ} {τₒ : Type nₒ} →
                    [ iso ]⊢ C ∈ Γᵢ ∣ τᵢ ⇒ Γₒ ∣ τₒ →
-                   [ equi ]⊢ (erase-context C) ∈ Γᵢ ∣ τᵢ ⇒ Γₒ ∣ τₒ
+                   [ equi ]⊢ erase-context C ∈ Γᵢ ∣ τᵢ ⇒ Γₒ ∣ τₒ
 erase-context-ty hole = hole
 erase-context-ty (Λ tyC) = Λ (erase-context-ty tyC)
 erase-context-ty (λ' a tyC) = λ' a (erase-context-ty tyC)
@@ -401,78 +401,6 @@ unerase-[/⊢tmTm] : ∀ {t₁ : Term 1 0} {t₂ : Term 0 0} {τ₁ τ₂}
                   unerase (ty₁ [/⊢tmTm ty₂ ]) ≡ unerase ty₁ [/tmTm unerase ty₂ ]
 unerase-[/⊢tmTm] ty₁ ty₂ = unerase-/⊢tm ty₁ (sub-⊢tmTm ty₂)
 
-unerase-eval : ∀ {t₁ t₂ : Term 0 0} {τ : Type 0}→
-                {ty₁ : [ equi ] [] ⊢ t₁ ∈ τ} → {ty₂ : [ equi ] [] ⊢ t₂ ∈ τ} →
-                ty₁ ⟶d ty₂ →
-                unerase ty₁ ⟶t unerase ty₂
-unerase-eval (beta {a = a} ty₁ ty₂ vty₂) =
-  subst₂ _⟶t_ (cong (λ' _ _ ·_)
-    (sym (unerase-vty vty₂)))
-    (trans (cong (λ t → unerase ty₁ [/tmTm t ]) (sym (unerase-vty vty₂))) (sym (unerase-[/⊢tmTm] ty₁ ty₂)))
-    beta
-unerase-eval (app₁ eval) = app₁ (unerase-eval eval)
-unerase-eval (app₂ {ty₂ = ty₂} {ty₂′ = ty₂′} vty₁ eval) =
-  subst₂ (λ t₁ t₁′ → (t₁ · unerase ty₂) ⟶t (t₁′ · unerase ty₂′))
-    (sym (unerase-vty vty₁))
-    (sym (unerase-vty vty₁))
-    (app₂ (unerase-eval eval))
-unerase-eval (Beta {ty = ty} {b = τ}) =
-  subst ((Λ (unerase ty) [ τ ]) ⟶t_) (sym (unerase-[/⊢tmTp] ty τ)) Beta
-unerase-eval (App eval) = App (unerase-eval eval)
-unerase-eval (unfoldFold vty₂) =
-  subst₂ _⟶t_
-    (sym (cong (λ t → unfold _ (fold _ t)) (unerase-vty vty₂)))
-    (sym (unerase-vty vty₂))
-    unfoldFold
-unerase-eval (fold eval) = fold (unerase-eval eval)
-unerase-eval (unfold eval) = unfold (unerase-eval eval)
-
-unerase-eval* : ∀ {t₁ t₂ : Term 0 0} {τ : Type 0}→
-                {ty₁ : [ equi ] [] ⊢ t₁ ∈ τ} → {ty₂ : [ equi ] [] ⊢ t₂ ∈ τ} →
-                ty₁ ⟶d* ty₂ →
-                unerase ty₁ ⟶t* unerase ty₂
-unerase-eval* refl⟶d* = refl⟶t*
-unerase-eval* (underlying⟶d* eval) = underlying⟶t* (unerase-eval eval)
-unerase-eval* (trans⟶d* evals₁ evals₂) = trans⟶t* (unerase-eval* evals₁) (unerase-eval* evals₂)
-
-erase-⇓-inv : {t : Term 0 0} {τ : Type 0} →
-              [ iso ] [] ⊢ t ∈ τ →
-              erase t ⇓ →
-              t ⇓
-erase-⇓-inv {t} {τ} ty (term v evals) = term (unerase-vderiv (normalizeDeriv-Value tyV)) evals′
-  where tyV : [ equi ] [] ⊢ ⌜ v ⌝ ∈ τ
-        tyV = preservation* (erase-ty ty) evals
-
-        unerase-evals : unerase (erase-ty ty) ⟶t* unerase (preservation* (erase-ty ty) evals)
-        unerase-evals = unerase-eval* (derivFollows* (erase-ty ty) evals)
-
-        unerase-evals′ : t ⟶t* unerase (preservation* (erase-ty ty) evals)
-        unerase-evals′ = subst (_⟶t* (unerase (preservation* (erase-ty ty) evals))) (unerase-erase ty) unerase-evals
-
-        evals′ : t ⟶t* ⌜ unerase-vderiv (normalizeDeriv-Value tyV) ⌝
-        evals′ = trans⟶t* unerase-evals′
-                 (subst ((unerase (preservation* (erase-ty ty) evals)) ⟶t*_)
-                   (unerase-vty (normalizeDeriv-Value tyV))
-                   (unerase-eval* (normalizeDeriv-eval* tyV)))
-
-unerase-⇓ : {t : Term 0 0} {τ : Type 0} →
-            (ty : [ equi ] [] ⊢ t ∈ τ) →
-            t ⇓ →
-            unerase ty ⇓
-unerase-⇓ {t} {τ} ty (term v evals) = term (unerase-vderiv (normalizeDeriv-Value tyV)) evals′
-  where tyV : [ equi ] [] ⊢ ⌜ v ⌝ ∈ τ
-        tyV = preservation* ty evals
-
-        unerase-evals : unerase ty ⟶t* unerase (preservation* ty evals)
-        unerase-evals = unerase-eval* (derivFollows* ty evals)
-
-        evals′ : unerase ty ⟶t* ⌜ unerase-vderiv (normalizeDeriv-Value tyV) ⌝
-        evals′ = trans⟶t* unerase-evals
-                 (subst ((unerase (preservation* ty evals)) ⟶t*_)
-                   (unerase-vty (normalizeDeriv-Value tyV))
-                   (unerase-eval* (normalizeDeriv-eval* tyV)))
-
-
 unerase-context : ∀ {mᵢ nᵢ mₒ nₒ} {C : Context mᵢ nᵢ mₒ nₒ}
                    {Γᵢ : Ctx mᵢ nᵢ} {τᵢ : Type nᵢ} {Γₒ : Ctx mₒ nₒ} {τₒ : Type nₒ} →
                    [ equi ]⊢ C ∈ Γᵢ ∣ τᵢ ⇒ Γₒ ∣ τₒ →
@@ -526,3 +454,111 @@ unerase-plug (tyC ·₁ ty₂) ty = cong (_· unerase ty₂) (unerase-plug tyC t
 unerase-plug (ty₁ ·₂ tyC) ty = cong (unerase ty₁ ·_) (unerase-plug tyC ty)
 unerase-plug (fold τ tyC) ty = cong (fold τ) (unerase-plug tyC ty)
 unerase-plug (unfold τ tyC) ty = cong (unfold τ) (unerase-plug tyC ty)
+
+unfoldFold-vderiv : ∀ {t τ a} → {ty : [ equi ] [] ⊢ t ∈ τ} →
+                    ValueDeriv ty →
+                    unfold a (fold a (unerase ty)) ⟶t unerase ty
+unfoldFold-vderiv {a = a} vty =
+  subst₂ _⟶t_
+    (cong (λ t → unfold a (fold a t)) (sym (unerase-vty vty)))
+    (sym (unerase-vty vty)) unfoldFold
+
+beta-unerase-vderiv : ∀ t₁ {t₂ τ a} → {ty₂ : [ equi ] [] ⊢ t₂ ∈ τ} →
+                      ValueDeriv ty₂ →
+                      ((λ' a t₁) · unerase ty₂) ⟶t (t₁ [/tmTm unerase ty₂ ])
+beta-unerase-vderiv t₁ vty₂ =
+  subst₂ _⟶t_ (cong₂ _·_ refl (sym (unerase-vty vty₂)))
+    (cong (t₁ [/tmTm_]) (sym (unerase-vty vty₂))) beta
+
+app₂⟶t*-unerase-vderiv : ∀ {t τ₁ τ₂} {ty : [ equi ] [] ⊢ t ∈ (τ₁ →' τ₂)} {t₂ t₂′} → ValueDeriv ty → t₂ ⟶t* t₂′ → (unerase ty · t₂) ⟶t* (unerase ty · t₂′)
+app₂⟶t*-unerase-vderiv {t₂ = t₂} {t₂′ = t₂′} vty evals =
+  subst₂ _⟶t*_ (cong (_· t₂) (sym (unerase-vty vty)))
+    (sym (cong (_· t₂′) (unerase-vty vty))) (app₂⟶t* evals)
+
+normalizeDeriv-unerase-eval* : ∀ {v : Val 0 0} {τ} → (ty : [ equi ] [] ⊢ ⌜ v ⌝ ∈ τ) →
+                               unerase ty ⟶t* unerase (normalizeDeriv ty)
+normalizeDeriv-unerase-eval* {Λ x} (Λ ty) = refl⟶t*
+normalizeDeriv-unerase-eval* {λ' x x₁} (λ' .x ty) = refl⟶t*
+normalizeDeriv-unerase-eval* {Λ x} (fold a ty) = fold⟶t* (normalizeDeriv-unerase-eval* ty)
+normalizeDeriv-unerase-eval* {λ' x x₁} (fold a ty) = fold⟶t* (normalizeDeriv-unerase-eval* ty)
+normalizeDeriv-unerase-eval* {fold x v} (fold a ty) = fold⟶t* (normalizeDeriv-unerase-eval* ty)
+normalizeDeriv-unerase-eval* {Λ x} (unfold a ty) with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-unerase-eval* ty
+normalizeDeriv-unerase-eval* {Λ x} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶t* (unfold⟶t* evals) (underlying⟶t* (unfoldFold-vderiv tyV′))
+normalizeDeriv-unerase-eval* {λ' x x₁} (unfold a ty) with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-unerase-eval* ty
+normalizeDeriv-unerase-eval* {λ' x x₁} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶t* (unfold⟶t* evals) (underlying⟶t* (unfoldFold-vderiv tyV′))
+normalizeDeriv-unerase-eval* {fold x v} (unfold a ty) with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-unerase-eval* ty
+normalizeDeriv-unerase-eval* {fold x v} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶t* (unfold⟶t* evals) (underlying⟶t* (unfoldFold-vderiv tyV′))
+
+unerase-eval : ∀ {τ t₁ t₂} (ty : [ equi ] [] ⊢ t₁ ∈ τ) →
+                 (eval : t₁ ⟶t t₂) →
+               unerase ty ⟶t* unerase (preservation ty eval)
+unerase-eval (ty [ b ]) (App eval) = App⟶t* (unerase-eval ty eval)
+unerase-eval (ty [ b ]) Beta =
+  trans⟶t* (App⟶t* (normalizeDeriv-unerase-eval* ty)) (underlying⟶t* (do-Beta ty b))
+  where do-Beta : ∀ {t} {a} (ty : [ equi ] [] ⊢ Λ t ∈ ∀' a) b →
+                  (unerase (normalizeDeriv ty) [ b ]) ⟶t (unerase (preservation (ty [ b ]) Beta))
+        do-Beta ty b with normalizeDeriv ty | normalizeDeriv-Value ty
+        do-Beta ty b | .(Λ ty₁) | Λ ty₁ = subst₂ _⟶t_ refl (sym (unerase-[/⊢tmTp] ty₁ b)) Beta
+unerase-eval (ty₁ · ty₂) (app₁ eval) = app₁⟶t* (unerase-eval ty₁ eval)
+unerase-eval (ty₁ · ty₂) (app₂ eval) =
+  trans⟶t* (app₁⟶t* (normalizeDeriv-unerase-eval* ty₁))
+    (app₂⟶t*-unerase-vderiv (normalizeDeriv-Value ty₁) (unerase-eval ty₂ eval))
+unerase-eval (ty₁ · ty₂) beta =
+  trans⟶t* (app₁⟶t* (normalizeDeriv-unerase-eval* ty₁))
+    (trans⟶t* (app₂⟶t*-unerase-vderiv (normalizeDeriv-Value ty₁) (normalizeDeriv-unerase-eval* ty₂))
+    (underlying⟶t* (do-reduction ty₁ ty₂)))
+  where do-reduction : ∀ {t₁} {a} {v₂} {τ} {a₁}
+                     (ty₁ : [ equi ] [] ⊢ (λ' a t₁) ∈ (a₁ →' τ))
+                     (ty₂ : [ equi ] [] ⊢ ⌜ v₂ ⌝ ∈ a₁) →
+                     (unerase (normalizeDeriv ty₁) · unerase (normalizeDeriv ty₂)) ⟶t
+                       unerase (preservation (ty₁ · ty₂) beta)
+        do-reduction ty₁ ty₂ with normalizeDeriv ty₁ | normalizeDeriv-Value ty₁ | normalizeDeriv ty₂ | normalizeDeriv-Value ty₂
+        do-reduction ty₁ ty₂ | .(λ' _ ty₁′) | λ' ty₁′ | ty₂′ | vty₂′ =
+          subst₂ _⟶t_ refl (sym (unerase-[/⊢tmTm] ty₁′ ty₂′))
+            (beta-unerase-vderiv (unerase ty₁′) vty₂′)
+
+unerase-eval (fold a ty) eval = fold⟶t* (unerase-eval ty eval)
+unerase-eval (unfold a ty) eval = unfold⟶t* (unerase-eval ty eval)
+
+unerase-eval* : ∀ {τ t₁ t₂} (ty : [ equi ] [] ⊢ t₁ ∈ τ) →
+               (evals : t₁ ⟶t* t₂) →
+               unerase ty ⟶t* unerase (preservation* ty evals)
+unerase-eval* ty refl⟶t* = refl⟶t*
+unerase-eval* ty (underlying⟶t* eval) = unerase-eval ty eval
+unerase-eval* ty (trans⟶t* evals₁ evals₂) =
+  trans⟶t* (unerase-eval* ty evals₁)
+           (unerase-eval* (preservation* ty evals₁) evals₂)
+
+
+unerase-⇓ : {t : Term 0 0} {τ : Type 0} →
+                    (ty : [ equi ] [] ⊢ t ∈ τ) →
+                    t ⇓ →
+                    unerase ty ⇓
+unerase-⇓ {t} {τ} ty (term v evals) =
+  term v′ (trans⟶t* (unerase-eval* ty evals) evals₂)
+    where v′ : Val 0 0
+          v′ = unerase-vderiv (normalizeDeriv-Value (preservation* ty evals))
+
+          evals₂ : unerase (preservation* ty evals) ⟶t* ⌜ v′ ⌝
+          evals₂ = subst (unerase (preservation* ty evals) ⟶t*_)
+                         (unerase-vty (normalizeDeriv-Value (preservation* ty evals)))
+                         (normalizeDeriv-unerase-eval* (preservation* ty evals))
+
+erase-⇓-inv : {t : Term 0 0} {τ : Type 0} →
+                     [ iso ] [] ⊢ t ∈ τ →
+                     erase t ⇓ → t ⇓
+erase-⇓-inv {t} {τ} ty (term v evals) = term (unerase-vderiv (normalizeDeriv-Value tyV)) evals′
+  where tyV : [ equi ] [] ⊢ ⌜ v ⌝ ∈ τ
+        tyV = preservation* (erase-ty ty) evals
+
+        unerase-evals : unerase (erase-ty ty) ⟶t* unerase (preservation* (erase-ty ty) evals)
+        unerase-evals = unerase-eval* (erase-ty ty) evals
+
+        unerase-evals′ : t ⟶t* unerase (preservation* (erase-ty ty) evals)
+        unerase-evals′ = subst (_⟶t* (unerase (preservation* (erase-ty ty) evals))) (unerase-erase ty) unerase-evals
+
+        evals′ : t ⟶t* ⌜ unerase-vderiv (normalizeDeriv-Value tyV) ⌝
+        evals′ = trans⟶t* unerase-evals′
+                 (subst ((unerase (preservation* (erase-ty ty) evals)) ⟶t*_)
+                   (unerase-vty (normalizeDeriv-Value tyV))
+                   (normalizeDeriv-unerase-eval* (preservation* (erase-ty ty) evals)))

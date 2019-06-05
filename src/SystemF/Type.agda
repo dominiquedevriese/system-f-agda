@@ -24,6 +24,7 @@ data Type (n : ℕ) : Set where
   var  : Fin n           → Type n   -- type variable
   _→'_ : Type n → Type n → Type n   -- arrow/function type
   ∀'   : Type (1 + n)    → Type n   -- universal type
+  ∃'   : Type (1 + n)    → Type n   -- existential type
   μ    : Type (1 + n)    → Type n   -- recursive type
 
 
@@ -41,6 +42,7 @@ module TypeSubst where
     var x    / σ = lift (lookup σ x)
     (a →' b) / σ = (a / σ) →' (b / σ)
     ∀' a     / σ = ∀' (a / σ ↑)
+    ∃' a     / σ = ∃' (a / σ ↑)
     μ a      / σ = μ (a / σ ↑)
 
     open Application (record { _/_ = _/_ }) using (_/✶_)
@@ -58,6 +60,11 @@ module TypeSubst where
                (∀' a) /✶ ρs ↑✶ k ≡ ∀' (a /✶ ρs ↑✶ (1 + k))
     ∀'-/✶-↑✶ k ε        = refl
     ∀'-/✶-↑✶ k (ρ ◅ ρs) = cong₂ _/_ (∀'-/✶-↑✶ k ρs) refl
+
+    ∃'-/✶-↑✶ : ∀ k {m n a} (ρs : Subs T m n) →
+               (∃' a) /✶ ρs ↑✶ k ≡ ∃' (a /✶ ρs ↑✶ (1 + k))
+    ∃'-/✶-↑✶ k ε        = refl
+    ∃'-/✶-↑✶ k (ρ ◅ ρs) = cong₂ _/_ (∃'-/✶-↑✶ k ρs) refl
 
     μT-/✶-↑✶ : ∀ k {m n a} (ρs : Subs T m n) →
                (μ a) /✶ ρs ↑✶ k ≡ μ (a /✶ ρs ↑✶ (1 + k))
@@ -147,6 +154,11 @@ module TypeLemmas where
         ∀' (a /✶₁ ρs₁ ↑✶₁ (1 + k))  ≡⟨ cong ∀' (/✶-↑✶ ρs₁ ρs₂ hyp (1 + k) a) ⟩
         ∀' (a /✶₂ ρs₂ ↑✶₂ (1 + k))  ≡⟨ sym (TypeApp.∀'-/✶-↑✶ _ k ρs₂) ⟩
         (∀' a) /✶₂ ρs₂ ↑✶₂ k        ∎
+      /✶-↑✶ ρs₁ ρs₂ hyp k (∃' a) = begin
+        (∃' a) /✶₁ ρs₁ ↑✶₁ k        ≡⟨ TypeApp.∃'-/✶-↑✶ _ k ρs₁ ⟩
+        ∃' (a /✶₁ ρs₁ ↑✶₁ (1 + k))  ≡⟨ cong ∃' (/✶-↑✶ ρs₁ ρs₂ hyp (1 + k) a) ⟩
+        ∃' (a /✶₂ ρs₂ ↑✶₂ (1 + k))  ≡⟨ sym (TypeApp.∃'-/✶-↑✶ _ k ρs₂) ⟩
+        (∃' a) /✶₂ ρs₂ ↑✶₂ k        ∎
       /✶-↑✶ ρs₁ ρs₂ hyp k (μ a) = begin
         (μ a) /✶₁ ρs₁ ↑✶₁ k         ≡⟨ TypeApp.μT-/✶-↑✶ _ k ρs₁ ⟩
         μ (a /✶₁ ρs₁ ↑✶₁ (1 + k))   ≡⟨ cong μ (/✶-↑✶ ρs₁ ρs₂ hyp (1 + k) a) ⟩

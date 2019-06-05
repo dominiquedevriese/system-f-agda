@@ -25,14 +25,16 @@ infixl 9 _[_] _·_
 -- Untyped terms with up to m free term variables and up to n free
 -- type variables
 data Term (m n : ℕ) : Set where
-  var     : (x : Fin m)                   → Term m n  -- term variable
-  Λ       : Term m (1 + n)                → Term m n  -- type abstraction
-  λ'      : Type n       → Term (1 + m) n → Term m n  -- term abstraction
-  -- μ       : Type n       → Term (1 + m) n → Term m n  -- recursive term
-  _[_]    : Term m n     → Type n         → Term m n  -- type application
-  _·_     : Term m n     → Term m n       → Term m n  -- term application
-  fold    : Type (1 + n) → Term m n       → Term m n  -- fold recursive type
-  unfold  : Type (1 + n) → Term m n       → Term m n  -- unfold recursive type
+  var     : (x : Fin m)                         → Term m n  -- term variable
+  Λ       : Term m (1 + n)                      → Term m n  -- type abstraction
+  pack    : Type n       → Term m n             → Term m n  -- existential package
+  unpack  : Term m n     → Term (1 + m) (1 + n) → Term m n  -- existential package
+  λ'      : Type n       → Term (1 + m) n       → Term m n  -- term abstraction
+  -- μ       : Type n       → Term (1 + m) n    → Term m n  -- recursive term
+  _[_]    : Term m n     → Type n               → Term m n  -- type application
+  _·_     : Term m n     → Term m n             → Term m n  -- term application
+  fold    : Type (1 + n) → Term m n             → Term m n  -- fold recursive type
+  unfold  : Type (1 + n) → Term m n             → Term m n  -- unfold recursive type
 
 -- Untyped values with up to m free term variables and up to n free
 -- type variables
@@ -40,12 +42,14 @@ data Val (m n : ℕ) : Set where
   Λ       : Term m (1 + n)                → Val m n   -- type abstraction
   λ'      : Type n       → Term (1 + m) n → Val m n   -- term abstraction
   fold    : Type (1 + n) → Val m n        → Val m n   -- fold recursive type
+  pack    : Type n       → Val m n        → Val m n   -- existential package
 
 -- Conversion from values to terms
 ⌜_⌝  : ∀ {m n} → Val m n → Term m n
 ⌜ Λ x      ⌝ = Λ x
 ⌜ λ' a t   ⌝ = λ' a t
 ⌜ fold a t ⌝ = fold a ⌜ t ⌝
+⌜ pack a t ⌝ = pack a ⌜ t ⌝
 
 
 ------------------------------------------------------------------------
@@ -62,14 +66,16 @@ module TermTypeSubst where
 
     -- Apply a type substitution to a term
     _/_ : ∀ {m n k} → Term m n → Sub T n k → Term m k
-    var x      / σ = var x
-    Λ t        / σ = Λ (t / σ ↑)
-    λ' a t     / σ = λ' (a /tp σ) (t / σ)
-    -- μ a t      / σ = μ (a /tp σ) (t / σ)
-    t [ a ]    / σ = (t / σ) [ a /tp σ ]
-    s · t      / σ = (s / σ) · (t / σ)
-    fold a t   / σ = fold (a /tp σ ↑) (t / σ)
-    unfold a t / σ = unfold (a /tp σ ↑) (t / σ)
+    var x        / σ = var x
+    Λ t          / σ = Λ (t / σ ↑)
+    λ' a t       / σ = λ' (a /tp σ) (t / σ)
+    pack τ t     / σ = pack (τ /tp σ) (t / σ)
+    unpack t₁ t₂ / σ = unpack (t₁ / σ) (t₂ / σ ↑)
+    -- μ a t     / σ = μ (a /tp σ) (t / σ)
+    t [ a ]      / σ = (t / σ) [ a /tp σ ]
+    s · t        / σ = (s / σ) · (t / σ)
+    fold a t     / σ = fold (a /tp σ ↑) (t / σ)
+    unfold a t   / σ = unfold (a /tp σ ↑) (t / σ)
 
   open TypeSubst using (varLift; termLift; sub)
 
@@ -113,20 +119,23 @@ module TermTypeLemmas where
     ∀ {n k} (ρ₁ : Sub T₁ n k) (ρ₂ : Sub T₂ n k) →
     (∀ i x → Type.var x /tp₁ ρ₁ ↑⋆₁ i ≡ Type.var x /tp₂ ρ₂ ↑⋆₂ i) →
      ∀ i {m} (t : Term m (i + n))  → t /₁ ρ₁ ↑⋆₁ i ≡ t /₂ ρ₂ ↑⋆₂ i
-  /-↑⋆ ρ₁ ρ₂ hyp i (var x)      = refl
-  /-↑⋆ ρ₁ ρ₂ hyp i (Λ t)        = cong Λ      (/-↑⋆ ρ₁ ρ₂ hyp (1 + i) t)
-  /-↑⋆ ρ₁ ρ₂ hyp i (λ' a t)     =
+  /-↑⋆ ρ₁ ρ₂ hyp i (var x)        = refl
+  /-↑⋆ ρ₁ ρ₂ hyp i (Λ t)          = cong Λ      (/-↑⋆ ρ₁ ρ₂ hyp (1 + i) t)
+  /-↑⋆ ρ₁ ρ₂ hyp i (λ' a t)       =
     cong₂ λ'     (T./-↑⋆ ρ₁ ρ₂ hyp i a)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
 
-  -- /-↑⋆ ρ₁ ρ₂ hyp i (μ a t)      =
+  /-↑⋆ ρ₁ ρ₂ hyp i (pack τ t)     = cong₂ pack (T./-↑⋆ ρ₁ ρ₂ hyp i τ) (/-↑⋆ ρ₁ ρ₂ hyp i t)
+  /-↑⋆ ρ₁ ρ₂ hyp i (unpack t₁ t₂) = cong₂ unpack (/-↑⋆ ρ₁ ρ₂ hyp i t₁) (/-↑⋆ ρ₁ ρ₂ hyp (1 + i) t₂)
+
+  -- /-↑⋆ ρ₁ ρ₂ hyp i (μ a t)     =
   --   cong₂ μ      (T./-↑⋆ ρ₁ ρ₂ hyp i a)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
-  /-↑⋆ ρ₁ ρ₂ hyp i (t [ b ])    =
+  /-↑⋆ ρ₁ ρ₂ hyp i (t [ b ])      =
     cong₂ _[_]     (/-↑⋆ ρ₁ ρ₂ hyp i t)     (T./-↑⋆ ρ₁ ρ₂ hyp i b)
-  /-↑⋆ ρ₁ ρ₂ hyp i (s · t)      =
+  /-↑⋆ ρ₁ ρ₂ hyp i (s · t)        =
     cong₂ _·_      (/-↑⋆ ρ₁ ρ₂ hyp i s)       (/-↑⋆ ρ₁ ρ₂ hyp i t)
-  /-↑⋆ ρ₁ ρ₂ hyp i (fold a t)   =
+  /-↑⋆ ρ₁ ρ₂ hyp i (fold a t)     =
     cong₂ fold   (T./-↑⋆ ρ₁ ρ₂ hyp (1 + i) a) (/-↑⋆ ρ₁ ρ₂ hyp i t)
-  /-↑⋆ ρ₁ ρ₂ hyp i (unfold a t) =
+  /-↑⋆ ρ₁ ρ₂ hyp i (unfold a t)   =
     cong₂ unfold (T./-↑⋆ ρ₁ ρ₂ hyp (1 + i) a) (/-↑⋆ ρ₁ ρ₂ hyp i t)
 
   /-wk : ∀ {m n} (t : Term m n) → t / TypeSubst.wk ≡ weaken t
@@ -164,14 +173,16 @@ module TermTermSubst where
 
     -- Apply a term substitution to a term
     _/_ : ∀ {m n k} → Term m n → TermSub T m n k → Term k n
-    var x      / ρ = lift (lookup ρ x)
-    Λ t        / ρ = Λ (t / ρ ↑tp)
-    λ' a t     / ρ = λ' a (t / ρ ↑tm)
-    -- μ a t      / ρ = μ a (t / ρ ↑tm)
-    t [ a ]    / ρ = (t / ρ) [ a ]
-    s · t      / ρ = (s / ρ) · (t / ρ)
-    fold a t   / ρ = fold a (t / ρ)
-    unfold a t / ρ = unfold a (t / ρ)
+    var x        / ρ = lift (lookup ρ x)
+    Λ t          / ρ = Λ (t / ρ ↑tp)
+    λ' a t       / ρ = λ' a (t / ρ ↑tm)
+    pack τ t     / ρ = pack τ (t / ρ)
+    unpack t₁ t₂ / ρ = unpack (t₁ / ρ) (t₂ / (ρ ↑tp) ↑tm)
+    -- μ a t     / ρ = μ a (t / ρ ↑tm)
+    t [ a ]      / ρ = (t / ρ) [ a ]
+    s · t        / ρ = (s / ρ) · (t / ρ)
+    fold a t     / ρ = fold a (t / ρ)
+    unfold a t   / ρ = unfold a (t / ρ)
 
   Fin′ : ℕ → ℕ → Set
   Fin′ m _ = Fin m

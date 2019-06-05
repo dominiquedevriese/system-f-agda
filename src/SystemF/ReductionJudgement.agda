@@ -16,6 +16,9 @@ data _⟶t_ : Term 0 0 → Term 0 0 → Set where
   app₁ : ∀ {t₁ t₁′ t₂} → t₁ ⟶t t₁′ → (t₁ · t₂) ⟶t (t₁′ · t₂)
   app₂ : ∀ {v₁ t₂ t₂′} → t₂ ⟶t t₂′ → (⌜ v₁ ⌝ · t₂) ⟶t (⌜ v₁ ⌝ · t₂′)
   beta : ∀ {t₁ v₂ a} → ((λ' a t₁) · ⌜ v₂ ⌝) ⟶t (t₁ [/tmTm ⌜ v₂ ⌝ ])
+  pack : ∀ {τ t t′} → t ⟶t t′ → pack τ t ⟶t pack τ t′
+  unpack : ∀ {t₁ t₁′ t₂} → t₁ ⟶t t₁′ → unpack t₁ t₂ ⟶t unpack t₁′ t₂
+  unpackPack : ∀ {t v τ} → unpack (pack τ ⌜ v ⌝) t ⟶t (t [/tmTp τ ] [/tmTm ⌜ v ⌝ ])
   fold : ∀ {t t′ a} → t ⟶t t′ → fold a t ⟶t fold a t′
   unfold : ∀ {t t′ a} → t ⟶t t′ → unfold a t ⟶t unfold a t′
   unfoldFold : ∀ {v a a′} → unfold a (fold a′ ⌜ v ⌝) ⟶t ⌜ v ⌝
@@ -39,6 +42,16 @@ app₂⟶t* : ∀ {v₁ t₂ t₂′} → t₂ ⟶t* t₂′ → (⌜ v₁ ⌝ �
 app₂⟶t* refl⟶t* = refl⟶t*
 app₂⟶t* (underlying⟶t* eval) = underlying⟶t* (app₂ eval)
 app₂⟶t* (trans⟶t* evals₁ evals₂) = trans⟶t* (app₂⟶t* evals₁) (app₂⟶t* evals₂)
+
+pack⟶t* : ∀ {τ t t′} → t ⟶t* t′ → (pack τ t) ⟶t* (pack τ t′)
+pack⟶t* refl⟶t* = refl⟶t*
+pack⟶t* (underlying⟶t* eval) = underlying⟶t* (pack eval)
+pack⟶t* (trans⟶t* evals evals₂) = trans⟶t* (pack⟶t* evals) (pack⟶t* evals₂)
+
+unpack⟶t* : ∀ {t₁ t₁′ t₂} → t₁ ⟶t* t₁′ → (unpack t₁ t₂) ⟶t* (unpack t₁′ t₂)
+unpack⟶t* refl⟶t* = refl⟶t*
+unpack⟶t* (underlying⟶t* eval) = underlying⟶t* (unpack eval)
+unpack⟶t* (trans⟶t* evals evals₂) = trans⟶t* (unpack⟶t* evals) (unpack⟶t* evals₂)
 
 fold⟶t* : ∀ {t t′ a} → t ⟶t* t′ → fold a t ⟶t* fold a t′
 fold⟶t* refl⟶t* = refl⟶t*

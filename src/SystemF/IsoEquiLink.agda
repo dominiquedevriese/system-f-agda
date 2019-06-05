@@ -22,8 +22,10 @@ open import SystemF.DerivationSemantics
 
 open TypeSubst       using () renaming (_[/_]  to _[/tp_]; _/_ to _/tp_)
 open TermTypeSubst   using () renaming (_[/_]  to _[/tmTp_]; _/_ to _/tmTp_; weaken to weakenTmTp)
-open TermTermSubst   using (TermSub) renaming (_[/_]  to _[/tmTm_]; _/_ to _/tm_; weaken to weakenTmTm; _/Var_ to _/Var-tm_)
-open WtTermTypeSubst using () renaming (_[/_]′ to _[/⊢tmTp_]; _/_ to _/⊢tmTp_; weaken to weaken-⊢tmTp; weakenAll to weakenAll-⊢tmTp)
+open TermTermSubst   using (TermSub; TermLift; termLift; varLift) renaming (_[/_]  to _[/tmTm_]; _/_ to _/tm_; weaken to weakenTmTm; _/Var_ to _/Var-tm_)
+open TermLift termLift using (_↑tm; _↑tp)
+module TermVar = TermLift varLift
+open WtTermTypeSubst using () renaming (_[/_] to _[/⊢tmTp′_]; _[/_]′ to _[/⊢tmTp_]; _/_ to _/⊢tmTp_; weaken to weaken-⊢tmTp; weakenAll to weakenAll-⊢tmTp)
 open WtTermTermSubst using () renaming (_[/_]  to _[/⊢tmTm_]; weakenAll to weakenAll-⊢tmTm; weaken to weaken-⊢tmTm; _/Var_ to _/⊢Var_)
 
 open CtxSubst  using () renaming (weaken to weakenCtx)
@@ -34,6 +36,8 @@ erase : ∀ {m n} → Term m n → Term m n
 erase (var x) = var x
 erase (Λ t) = Λ (erase t)
 erase (λ' x t) = λ' x (erase t)
+erase (pack τ t) = pack τ (erase t)
+erase (unpack t₁ t₂) = unpack (erase t₁) (erase t₂)
 -- erase (μ x t) = μ x (erase t)
 erase (t [ x ]) = erase t [ x ]
 erase (t₁ · t₂) = erase t₁ · erase t₂
@@ -46,6 +50,8 @@ erase-ty : ∀ {m n} {t : Term m n} {Γ : Ctx m n} {τ : Type n}→
 erase-ty (var x) = var x
 erase-ty (Λ ty) = Λ (erase-ty ty)
 erase-ty (λ' a ty) = λ' a (erase-ty ty)
+erase-ty (pack τ₂ ty) = pack τ₂ (erase-ty ty)
+erase-ty (unpack ty₁ ty₂) = unpack (erase-ty ty₁) (erase-ty ty₂)
 -- erase-ty (μ a ty) = μ a (erase-ty ty)
 erase-ty (ty [ b ]) = erase-ty ty [ b ]
 erase-ty (ty₁ · ty₂) = erase-ty ty₁ · erase-ty ty₂
@@ -56,11 +62,13 @@ erase-ty (unfold a ty) = unfold a (erase-ty ty)
 erase-val : ∀ {m n} (v : Val m n) → Val m n
 erase-val (Λ t) = Λ (erase t)
 erase-val (λ' a t) = λ' a (erase t)
+erase-val (pack τ t) = pack τ (erase-val t)
 erase-val (fold a v) = erase-val v
 
 erase-⌜⌝ : (v : Val 0 0) → erase (⌜ v ⌝) ≡ ⌜ erase-val v ⌝
 erase-⌜⌝ (Λ x) = refl
 erase-⌜⌝ (λ' x x₁) = refl
+erase-⌜⌝ (pack τ v) = cong (pack τ) (erase-⌜⌝ v)
 erase-⌜⌝ (fold x v) = erase-⌜⌝ v
 
 module TermTypeAppErase {T : ℕ → Set} (l : Lift T Type) where
@@ -72,25 +80,25 @@ module TermTypeAppErase {T : ℕ → Set} (l : Lift T Type) where
   erase-sub (var x) σ = refl
   erase-sub (Λ t) σ = cong Λ (erase-sub t (σ ↑))
   erase-sub (λ' a t) σ = cong (λ' (a /tpl σ)) (erase-sub t σ)
+  erase-sub (pack τ t) σ = cong (pack (τ /tpl σ)) (erase-sub t σ)
+  erase-sub (unpack t₁ t₂) σ = cong₂ unpack (erase-sub t₁ σ) (erase-sub t₂ (σ ↑))
   erase-sub (t [ τ ]) σ = cong (_[ τ /tpl σ ]) (erase-sub t σ)
   erase-sub (t₁ · t₂) σ = cong₂ _·_ (erase-sub t₁ σ) (erase-sub t₂ σ)
   erase-sub (fold τ t) σ = erase-sub t σ
   erase-sub (unfold τ t) σ = erase-sub t σ
 
-erase-[/tmTp] : ∀ (t : Term 0 1) {a} → erase t [/tmTp a ] ≡ erase (t [/tmTp a ])
-erase-[/tmTp] t {τ} = erase-sub t (sub τ)
-  where open TypeSubst using (termLift; sub)
-        open TermTypeAppErase termLift
+erase-[/tmTp] : ∀ {k} (t : Term k 1) {a} → erase t [/tmTp a ] ≡ erase (t [/tmTp a ])
+erase-[/tmTp] t {τ} = erase-sub t (TypeSubst.sub τ)
+  where open TypeSubst using (sub)
+        open TermTypeAppErase TypeSubst.termLift
 
 erase-weakenType : ∀ {m n} (t : Term m n) → TermTypeLemmas.weaken (erase t) ≡ erase (TermTypeLemmas.weaken t)
 erase-weakenType t = erase-sub t VarSubst.wk
-  where open TypeSubst using (varLift)
-        open TermTypeAppErase varLift
+  where open TermTypeAppErase TypeSubst.varLift
 
 open TermTermSubst using (TermLift; TermSub; termLift)
 
 module TermTermAppErase where
-  open TermLift termLift
   open TermTermSubst using (Fin′; module TermTermApp; varLift; weaken)
   open TermLift varLift using () renaming (_↑tp to _↑tpvar; _↑tm to _↑tmvar)
   open TermTermApp varLift using () renaming (_/_ to _/var_)
@@ -100,6 +108,8 @@ module TermTermAppErase where
   erase-sub-var (var x) σ = refl
   erase-sub-var {n = n} (Λ t) σ = cong Λ (erase-sub-var t (_↑tpvar {n = n} σ))
   erase-sub-var {n = n} (λ' a t) σ = cong (λ' a) (erase-sub-var t (_↑tmvar {n = n} σ))
+  erase-sub-var (pack τ t) σ = cong (pack τ) (erase-sub-var t σ)
+  erase-sub-var {n = n} (unpack t₁ t₂) σ = cong₂ unpack (erase-sub-var t₁ σ) (erase-sub-var t₂ (_↑tmvar {n = n} (_↑tpvar {n = n} σ)))
   erase-sub-var (t [ τ ]) σ = cong (_[ τ ]) (erase-sub-var t σ)
   erase-sub-var (t₁ · t₂) σ = cong₂ _·_ (erase-sub-var t₁ σ) (erase-sub-var t₂ σ)
   erase-sub-var (fold τ t) σ = erase-sub-var t σ
@@ -108,14 +118,8 @@ module TermTermAppErase where
   erase-weaken : ∀ {m n} (t : Term m n) → weaken (erase t) ≡ erase (weaken t)
   erase-weaken t = erase-sub-var t VarSubst.wk
 
-  erase-sub : ∀ {m n k} (t : Term m n) (σ : TermSub Term m n k) → erase t / map erase σ ≡ erase (t / σ)
-  erase-sub (var x) σ = lookup-map x erase σ
-  erase-sub (Λ t) σ = cong Λ (trans (cong (erase t /_) h) (erase-sub t (σ ↑tp)))
-    where
-      open ≡-Reasoning
-      h : map TermTypeLemmas.weaken (map erase σ) ≡
-          map erase (map TermTypeLemmas.weaken σ)
-      h = begin
+  erase-↑tp : ∀ {m n k} (σ : TermSub Term m n k) → map erase σ ↑tp ≡ map erase (σ ↑tp)
+  erase-↑tp σ = begin
             map TermTypeLemmas.weaken (map erase σ)
               ≡⟨ sym (map-∘ TermTypeLemmas.weaken erase σ) ⟩
             map (TermTypeLemmas.weaken ∘ erase) σ
@@ -123,18 +127,34 @@ module TermTermAppErase where
             map (erase ∘ TermTypeLemmas.weaken) σ
               ≡⟨ map-∘ erase TermTypeLemmas.weaken σ ⟩
             map erase (map TermTypeLemmas.weaken σ) ∎
-  erase-sub (λ' a t) σ = cong (λ' a) (trans (cong (erase t /_) h) (erase-sub t (σ ↑tm)))
-    where
-      open ≡-Reasoning
-      open TermTermSubst using (_↑; weaken)
-      h : map erase σ ↑ ≡ map erase (σ ↑)
-      h = cong (_∷_ (var zero))
+    where open ≡-Reasoning
+
+  erase-↑tm : ∀ {m n k} (σ : TermSub Term m n k) → map erase σ ↑tm ≡ map erase (σ ↑tm)
+  erase-↑tm σ = cong (_∷_ (var zero))
           (begin
             map weaken (map erase σ) ≡⟨ sym (map-∘ weaken erase σ) ⟩
             map (weaken ∘ erase) σ ≡⟨ map-cong (λ t → erase-weaken t) σ ⟩
             map (erase ∘ weaken) σ ≡⟨ map-∘ erase weaken σ ⟩
             map erase (map weaken σ)
           ∎)
+    where
+      open ≡-Reasoning
+      open TermTermSubst using (_↑; weaken)
+
+  erase-sub : ∀ {m n k} (t : Term m n) (σ : TermSub Term m n k) → erase t / map erase σ ≡ erase (t / σ)
+  erase-sub (var x) σ = lookup-map x erase σ
+  erase-sub (Λ t) σ = cong Λ (trans (cong (erase t /_) (erase-↑tp σ)) (erase-sub t (σ ↑tp)))
+  erase-sub (λ' a t) σ = cong (λ' a) (trans (cong (erase t /_) (erase-↑tm σ)) (erase-sub t (σ ↑tm)))
+  erase-sub (pack τ t) σ = cong (pack τ) (erase-sub t σ)
+  erase-sub (unpack t₁ t₂) σ = cong₂ unpack (erase-sub t₁ σ) (trans (cong (erase t₂ /_) h) (erase-sub t₂ (σ ↑tp ↑tm)))
+    where
+      open ≡-Reasoning
+      h : map erase σ ↑tp ↑tm ≡ map erase (σ ↑tp ↑tm)
+      h = begin
+            map erase σ ↑tp ↑tm ≡⟨ cong _↑tm (erase-↑tp σ) ⟩
+            map erase (σ ↑tp) ↑tm ≡⟨ erase-↑tm (σ ↑tp) ⟩
+            map erase (σ ↑tp ↑tm)
+          ∎
   erase-sub (t [ τ ]) σ = cong (_[ τ ]) (erase-sub t σ)
   erase-sub (t₁ · t₂) σ = cong₂ _·_ (erase-sub t₁ σ) (erase-sub t₂ σ)
   erase-sub (fold τ t) σ = erase-sub t σ
@@ -164,6 +184,13 @@ erase-eval (app₁ eval) = app₁⟶t* (erase-eval eval)
 erase-eval (app₂ {v₁ = v₁} eval) rewrite erase-⌜⌝ v₁ = app₂⟶t* (erase-eval eval)
 erase-eval {t₁ = (λ' a t₁) · _} (beta {v₂ = v₂}) rewrite erase-⌜⌝ v₂ =
   subst ((λ' a (erase t₁) · _) ⟶t*_) (erase-[/tmVal] t₁ v₂) (underlying⟶t* beta)
+erase-eval (pack eval) = pack⟶t* (erase-eval eval)
+erase-eval (unpack eval) = unpack⟶t* (erase-eval eval)
+erase-eval (unpackPack {t = t} {v = v} {τ = τ}) rewrite erase-⌜⌝ v =
+  underlying⟶t* (subst (unpack (pack τ ⌜ erase-val v ⌝) (erase t) ⟶t_) h unpackPack)
+  where h : (erase t [/tmTp τ ]) [/tmTm ⌜ erase-val v ⌝ ] ≡
+            erase (t [/tmTp τ ] [/tmTm ⌜ v ⌝ ])
+        h = trans (cong₂ _[/tmTm_] (erase-[/tmTp] t) (sym (erase-⌜⌝ v))) (erase-[/tmTm] (t [/tmTp τ ]))
 erase-eval (fold eval) = erase-eval eval
 erase-eval (unfold eval) = erase-eval eval
 erase-eval unfoldFold = refl⟶t*
@@ -217,6 +244,8 @@ unerase : ∀ {m n} {t : Term m n} {Γ : Ctx m n} {τ : Type n}→
 unerase (var x) = var x
 unerase (Λ ty) = Λ (unerase ty)
 unerase (λ' a ty) = λ' a (unerase ty)
+unerase (pack τ ty) = pack τ (unerase ty)
+unerase (unpack ty₁ ty₂) = unpack (unerase ty₁) (unerase ty₂)
 -- unerase (μ a ty) = μ a (unerase ty)
 unerase (ty [ b ]) = unerase ty [ b ]
 unerase (ty₁ · ty₂) = unerase ty₁ · unerase ty₂
@@ -229,6 +258,8 @@ unerase-ty : ∀ {m n} {t : Term m n} {Γ : Ctx m n} {τ : Type n}→
 unerase-ty (var x) = var x
 unerase-ty (Λ ty) = Λ (unerase-ty ty)
 unerase-ty (λ' a ty) = λ' a (unerase-ty ty)
+unerase-ty (pack τ ty) = pack τ (unerase-ty ty)
+unerase-ty (unpack ty₁ ty₂) = unpack (unerase-ty ty₁) (unerase-ty ty₂)
 -- unerase-ty (μ a ty) = μ a (unerase-ty ty)
 unerase-ty (ty [ b ]) = unerase-ty ty [ b ]
 unerase-ty (ty₁ · ty₂) = unerase-ty ty₁ · unerase-ty ty₂
@@ -241,6 +272,8 @@ unerase-erase : ∀ {m n} {t : Term m n} {Γ : Ctx m n} {τ : Type n}→
 unerase-erase (var x) = refl
 unerase-erase (Λ ty) = cong Λ (unerase-erase ty)
 unerase-erase (λ' a ty) = cong (λ' a) (unerase-erase ty)
+unerase-erase (pack τ ty) = cong (pack τ) (unerase-erase ty)
+unerase-erase (unpack ty₁ ty₂) = cong₂ unpack (unerase-erase ty₁) (unerase-erase ty₂)
 -- unerase-erase (μ a ty) = cong (μ a) (unerase-erase ty)
 unerase-erase (ty [ b ]) = cong (λ t → t [ b ]) (unerase-erase ty)
 unerase-erase (ty₁ · ty₂) = cong₂ _·_ (unerase-erase ty₁) (unerase-erase ty₂)
@@ -253,6 +286,8 @@ erase-unerase : ∀ {m n} {t : Term m n} {Γ : Ctx m n} {τ : Type n}→
 erase-unerase (var x) = refl
 erase-unerase (Λ ty) = cong Λ (erase-unerase ty)
 erase-unerase (λ' a ty) = cong (λ' a) (erase-unerase ty)
+erase-unerase (pack τ ty) = cong (pack τ) (erase-unerase ty)
+erase-unerase (unpack ty₁ ty₂) = cong₂ unpack (erase-unerase ty₁) (erase-unerase ty₂)
 -- erase-unerase (μ a ty) = cong (μ a) (erase-unerase ty)
 erase-unerase (ty [ b ]) = cong (λ t → t [ b ]) (erase-unerase ty)
 erase-unerase (ty₁ · ty₂) = cong₂ _·_ (erase-unerase ty₁) (erase-unerase ty₂)
@@ -264,6 +299,7 @@ unerase-vderiv : {t : Term 0 0} {Γ : Ctx 0 0} {τ : Type 0}→
                  Val 0 0
 unerase-vderiv (λ' {a = a} ty) = λ' a (unerase ty)
 unerase-vderiv (Λ ty) = Λ (unerase ty)
+unerase-vderiv (pack {t} {b} {a} ty) = pack a (unerase-vderiv ty)
 unerase-vderiv (fold {a = a} vty) = fold a (unerase-vderiv vty)
 
 unerase-vty : {t : Term 0 0} {τ : Type 0}→
@@ -271,7 +307,13 @@ unerase-vty : {t : Term 0 0} {τ : Type 0}→
               unerase ty ≡ ⌜ unerase-vderiv vty ⌝
 unerase-vty (λ' ty) = refl
 unerase-vty (Λ ty) = refl
+unerase-vty (pack ty) = cong (pack _) (unerase-vty ty)
 unerase-vty (fold vty) = cong (fold _) (unerase-vty vty)
+
+unerase-⊢subst : ∀ {m n} {Γ₁ Γ₂ : Ctx m n} {t₁ t₂ : Term m n} {τ₁ τ₂ : Type n} →
+                 (eqΓ : Γ₁ ≡ Γ₂) → (eqt : t₁ ≡ t₂) → (eqτ : τ₁ ≡ τ₂) → (ty : [ equi ] Γ₁ ⊢ t₁ ∈ τ₁) →
+                 unerase (⊢subst eqΓ eqt eqτ ty) ≡ unerase ty
+unerase-⊢subst refl refl refl ty = refl
 
 unerase-⊢substCtx : ∀ {m n} {Γ₁ Γ₂ : Ctx m n} {t : Term m n} {a : Type n} →
                     (eqΓ : Γ₁ ≡ Γ₂) → (ty : [ equi ] Γ₁ ⊢ t ∈ a) →
@@ -293,6 +335,12 @@ unerase-tysub {Γ = Γ} σ (Λ ty₁) =
     (trans (unerase-⊢substCtx (sym (TypeLemmas.map-weaken-⊙ Γ σ)) (ty₁ /⊢tmTp σ TypeLemmas.↑))
       (unerase-tysub (σ TypeLemmas.↑) ty₁))
 unerase-tysub σ (λ' a ty₁) = cong (λ' (a /tp σ)) (unerase-tysub σ ty₁)
+unerase-tysub σ (pack {τ₁ = τ₁} τ₂ ty) = cong (pack (τ₂ /tp σ)) (trans (unerase-⊢substTp (TypeLemmas.sub-commutes τ₁) (ty /⊢tmTp σ)) (unerase-tysub σ ty))
+unerase-tysub {Γ = Γ} σ (unpack {τ₁ = τ₁} {τ₂ = τ₂} ty₁ ty₂) =
+  cong₂ unpack (unerase-tysub σ ty₁)
+    (trans
+      (unerase-⊢subst (cong ((τ₁ TypeLemmas./ σ TypeLemmas.↑) ∷_) (sym (TypeLemmas.map-weaken-⊙ Γ σ))) refl (TypeLemmas.weaken-↑ τ₂) (ty₂ /⊢tmTp σ TypeLemmas.↑))
+      (unerase-tysub (σ TypeLemmas.↑) ty₂))
 unerase-tysub σ (_[_] {a = a} ty₁ b) = trans (unerase-⊢substTp (sym (TypeLemmas.sub-commutes a)) ((ty₁ /⊢tmTp σ) [ b TypeLemmas./ σ ]))
                               (cong (_[ b TypeLemmas./ σ ]) (unerase-tysub σ ty₁))
 unerase-tysub σ (ty₁ · ty₂) = cong₂ _·_ (unerase-tysub σ ty₁) (unerase-tysub σ ty₂)
@@ -309,6 +357,11 @@ unerase-[/⊢tmTp] : ∀ {t₁ : Term 0 1} {τ₁}
 unerase-[/⊢tmTp] ty₁ τ₂ = unerase-tysub (sub τ₂) ty₁
   where open TypeSubst using (sub)
 
+unerase-[/⊢tmTp′] : ∀ {k} {Γ : Ctx k 1} {t₁ : Term k 1} {τ₁}
+                   (ty₁ : [ equi ] Γ ⊢ t₁ ∈ τ₁) τ₂ →
+                   unerase (ty₁ [/⊢tmTp′ τ₂ ]) ≡ unerase ty₁ [/tmTp τ₂ ]
+unerase-[/⊢tmTp′] ty₁ τ₂ = unerase-tysub (TypeSubst.sub τ₂) ty₁
+
 
 open WtTermTermSubst using ([_]_⇒_⊢_) renaming (_/_ to _/⊢tm_; _↑ to _↑⊢tm; sub to sub-⊢tmTm)
 
@@ -322,12 +375,6 @@ unerase-lookup-⊢ : ∀ {m n k} {Γ : Ctx m n} {ts : Vec (Term m n) k} {as : Ve
                    unerase (lookup-⊢ x tyρ) ≡ lookup (unerase-tmsub tyρ) x
 unerase-lookup-⊢ zero (ty ∷ tyρ) = refl
 unerase-lookup-⊢ (suc x) (ty ∷ tyρ) = unerase-lookup-⊢ x tyρ
-
-unerase-⊢subst : ∀ {m n} {Γ₁ Γ₂ : Ctx m n} {t₁ t₂ : Term m n} {a₁ a₂ : Type n} →
-                 (eqΓ : Γ₁ ≡ Γ₂) → (eqt : t₁ ≡ t₂) → (eqτ : a₁ ≡ a₂) →
-                 (ty : [ equi ] Γ₁ ⊢ t₁ ∈ a₁) →
-                 unerase (⊢subst eqΓ eqt eqτ ty) ≡ unerase ty
-unerase-⊢subst refl refl refl hyp = refl
 
 unerase-weaken-⊢tmTp : ∀ {n} {k} {t : Term k n} {a : Type n}
                          {Δ : Ctx k n} (ty : [ equi ] Δ ⊢ t ∈ a) →
@@ -359,6 +406,13 @@ unerase-/⊢Var {Γ = Γ} ρ (λ' a ty) =
   cong (λ' a) (
     trans (unerase-/⊢Var (ρ VarSubst.↑) (⊢substCtx (CtxLemmas./Var-∷ a ρ Γ) ty))
       (cong (_/Var-tm (ρ VarSubst.↑)) (unerase-⊢substCtx (CtxLemmas./Var-∷ a ρ Γ) ty)))
+unerase-/⊢Var {Γ = Γ} ρ (pack τ ty) =
+  cong (pack τ) (unerase-/⊢Var ρ ty)
+unerase-/⊢Var {Γ = Γ} ρ (unpack {t₁ = t₁} {t₂ = t₂} {τ₁ = τ₁} {τ₂ = τ₂} ty₁ ty₂) =
+  cong₂ unpack (unerase-/⊢Var ρ ty₁)
+    (trans
+      (unerase-/⊢Var (ρ VarSubst.↑) (⊢substCtx (WtTermTermSubst.subw-/Var ρ Γ) ty₂))
+      (cong (_/Var-tm ρ VarSubst.↑) (unerase-⊢substCtx (WtTermTermSubst.subw-/Var ρ Γ) ty₂)))
 unerase-/⊢Var ρ (ty [ b ]) =
   cong (_[ b ]) (unerase-/⊢Var ρ ty)
 unerase-/⊢Var ρ (ty₁ · ty₂) = cong₂ _·_ (unerase-/⊢Var ρ ty₁) (unerase-/⊢Var ρ ty₂)
@@ -379,6 +433,12 @@ unerase-tmsub-weakenAll-⊢tmTm :
 unerase-tmsub-weakenAll-⊢tmTm [] = refl
 unerase-tmsub-weakenAll-⊢tmTm (ty ∷ tyρ) = cong₂ _∷_ (unerase-weaken-⊢tmTm ty) (unerase-tmsub-weakenAll-⊢tmTm tyρ)
 
+unerase-tmsub-↑ :
+  ∀ {n} {m} {k} {Γ : Ctx m n} {Δ : Ctx k n} {b}
+    {ρ : Vec (Term k n) m} (tyρ : [ equi ] Δ ⊢ⁿ ρ ∈ Γ) →
+    unerase-tmsub (WtTermTermSubst._↑ {b = b} tyρ) ≡ (unerase-tmsub tyρ) TermTermSubst.↑
+unerase-tmsub-↑ tyρ = cong (var zero ∷_) (unerase-tmsub-weakenAll-⊢tmTm tyρ)
+
 unerase-/⊢tm : ∀ {m n k} {Γ : Ctx m n} {Δ : Ctx k n} {t a ρ} →
                 (ty : [ equi ] Γ ⊢ t ∈ a) → (tyρ : [ equi ] Γ ⇒ Δ ⊢ ρ) →
                 unerase (ty /⊢tm tyρ) ≡ unerase ty /tm unerase-tmsub tyρ
@@ -390,6 +450,15 @@ unerase-/⊢tm (λ' a ty) tyρ =
   cong (λ' a) (
     trans (unerase-/⊢tm ty (tyρ ↑⊢tm))
       (cong (unerase ty /tm_) (cong (var zero ∷_) (unerase-tmsub-weakenAll-⊢tmTm tyρ))))
+unerase-/⊢tm (pack τ ty) tyρ =
+  cong (pack τ) (unerase-/⊢tm ty tyρ)
+unerase-/⊢tm (unpack ty₁ ty₂) tyρ =
+  cong₂ unpack (unerase-/⊢tm ty₁ tyρ)
+    (trans
+      (unerase-/⊢tm ty₂ (weakenAll-⊢tmTp tyρ ↑⊢tm))
+      (cong (unerase ty₂ /tm_) (trans
+                                  (unerase-tmsub-↑ (weakenAll-⊢tmTp tyρ))
+                                  (cong TermTermSubst._↑ (unerase-tmsub-weakenAll-⊢tmTp tyρ)))))
 unerase-/⊢tm (ty [ b ]) tyρ = cong (_[ b ]) (unerase-/⊢tm ty tyρ)
 unerase-/⊢tm (ty₁ · ty₂) tyρ = cong₂ _·_ (unerase-/⊢tm ty₁ tyρ) (unerase-/⊢tm ty₂ tyρ)
 unerase-/⊢tm (fold a ty) tyρ = cong (fold a) (unerase-/⊢tm ty tyρ)
@@ -479,13 +548,17 @@ normalizeDeriv-unerase-eval* : ∀ {v : Val 0 0} {τ} → (ty : [ equi ] [] ⊢ 
                                unerase ty ⟶t* unerase (normalizeDeriv ty)
 normalizeDeriv-unerase-eval* {Λ x} (Λ ty) = refl⟶t*
 normalizeDeriv-unerase-eval* {λ' x x₁} (λ' .x ty) = refl⟶t*
+normalizeDeriv-unerase-eval* {pack τ t} (pack τ ty) = pack⟶t* (normalizeDeriv-unerase-eval* ty)
 normalizeDeriv-unerase-eval* {Λ x} (fold a ty) = fold⟶t* (normalizeDeriv-unerase-eval* ty)
 normalizeDeriv-unerase-eval* {λ' x x₁} (fold a ty) = fold⟶t* (normalizeDeriv-unerase-eval* ty)
+normalizeDeriv-unerase-eval* {pack τ t} (fold a ty) = fold⟶t* (normalizeDeriv-unerase-eval* ty)
 normalizeDeriv-unerase-eval* {fold x v} (fold a ty) = fold⟶t* (normalizeDeriv-unerase-eval* ty)
 normalizeDeriv-unerase-eval* {Λ x} (unfold a ty) with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-unerase-eval* ty
 normalizeDeriv-unerase-eval* {Λ x} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶t* (unfold⟶t* evals) (underlying⟶t* (unfoldFold-vderiv tyV′))
 normalizeDeriv-unerase-eval* {λ' x x₁} (unfold a ty) with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-unerase-eval* ty
 normalizeDeriv-unerase-eval* {λ' x x₁} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶t* (unfold⟶t* evals) (underlying⟶t* (unfoldFold-vderiv tyV′))
+normalizeDeriv-unerase-eval* {pack τ v} (unfold a ty) with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-unerase-eval* ty
+normalizeDeriv-unerase-eval* {pack τ v} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶t* (unfold⟶t* evals) (underlying⟶t* (unfoldFold-vderiv tyV′))
 normalizeDeriv-unerase-eval* {fold x v} (unfold a ty) with normalizeDeriv ty | normalizeDeriv-Value ty | normalizeDeriv-unerase-eval* ty
 normalizeDeriv-unerase-eval* {fold x v} (unfold a ty) | fold a ty₁ | fold tyV′ | evals = trans⟶t* (unfold⟶t* evals) (underlying⟶t* (unfoldFold-vderiv tyV′))
 
@@ -517,6 +590,20 @@ unerase-eval (ty₁ · ty₂) beta =
           subst₂ _⟶t_ refl (sym (unerase-[/⊢tmTm] ty₁′ ty₂′))
             (beta-unerase-vderiv (unerase ty₁′) vty₂′)
 
+unerase-eval (pack τ ty) (pack eval) = pack⟶t* (unerase-eval ty eval)
+unerase-eval (unpack ty₁ ty₂) (unpack eval) = unpack⟶t* (unerase-eval ty₁ eval)
+unerase-eval (unpack ty₁ ty₂) unpackPack with normalizeDeriv ty₁ | normalizeDeriv-Value ty₁ | normalizeDeriv-unerase-eval* ty₁
+unerase-eval (unpack {τ₁ = τ₁} {τ₂ = τ₂} ty₁ ty₂) unpackPack | pack τ ty | pack tyV | evals =
+  trans⟶t*
+    (unpack⟶t* evals)
+    (underlying⟶t*
+      (subst₂ _⟶t_
+        (cong (λ t → unpack (pack τ t) (unerase ty₂)) (sym (unerase-vty tyV)))
+        (sym (trans (unerase-⊢substTp (TypeLemmas.weaken-sub′ τ₂) ((ty₂ [/⊢tmTp′ τ ]) [/⊢tmTm ty ]))
+        (trans
+          (unerase-[/⊢tmTm] (ty₂ WtTermTypeSubst.[/ τ ]) ty)
+          (cong₂ _[/tmTm_] (unerase-[/⊢tmTp′] ty₂ τ) (unerase-vty tyV)))))
+        unpackPack))
 unerase-eval (fold a ty) eval = fold⟶t* (unerase-eval ty eval)
 unerase-eval (unfold a ty) eval = unfold⟶t* (unerase-eval ty eval)
 

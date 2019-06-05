@@ -16,7 +16,7 @@ open import Data.Nat using (zero; suc; ℕ; _+_)
 open import Data.Product using (_,_)
 open import Data.Vec using (Vec; []; _∷_; _++_; lookup; map; toList; zip)
 open import Data.Vec.Properties
-  using (map-∘; map-cong; lookup-++-inject+)
+  using (map-∘; map-cong; lookup-++ˡ)
 open import Data.Vec.Categorical
   using (lookup-functor-morphism)
 open import Function as Fun using (_∘_)
@@ -57,7 +57,7 @@ module CtxSubst where
   _/Var_ : ∀ {m n k} → Sub Fin m k → Ctx k n → Ctx m n
   σ /Var Γ = map (λ x → lookup Γ x) σ
 
-open TypeSubst using () renaming (_[/_]  to _[/tp_])
+open TypeSubst using () renaming (_[/_]  to _[/tp_]; weaken to weakenTp)
 open CtxSubst  using () renaming (weaken to weakenCtx)
 
 infix  4 [_]_⊢_∈_ [_]_⊢_∉_ [_]_⊢val_∈_ [_]_⊢ⁿ_∈_
@@ -80,6 +80,8 @@ data [_]_⊢_∈_ (s : Style) {m n} (Γ : Ctx m n) : Term m n → Type n → Set
   var    : (x : Fin m) → [ s ] Γ ⊢ var x ∈ lookup Γ x
   Λ      : ∀ {t a} → [ s ] (weakenCtx Γ) ⊢ t ∈ a → [ s ] Γ ⊢ Λ t ∈ ∀' a
   λ'     : ∀ {t b} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ b → [ s ] Γ ⊢ λ' a t ∈ a →' b
+  pack   : ∀ {t τ₁} τ₂ → [ s ] Γ ⊢ t ∈ τ₁ [/tp τ₂ ] → [ s ] Γ ⊢ pack τ₂ t ∈ ∃' τ₁
+  unpack : ∀ {t₁ t₂ τ₁ τ₂} → [ s ] Γ ⊢ t₁ ∈ ∃' τ₁ → [ s ] (τ₁ ∷ weakenCtx Γ) ⊢ t₂ ∈ weakenTp τ₂ → [ s ] Γ ⊢ unpack t₁ t₂ ∈ τ₂
   -- μ      : ∀ {t} → (a : Type n) → [ s ] a ∷ Γ ⊢ t ∈ a → [ s ] Γ ⊢ μ a t ∈ a
   _[_]   : ∀ {t a} → [ s ] Γ ⊢ t ∈ ∀' a → (b : Type n) → [ s ] Γ ⊢ t [ b ] ∈ a [/tp b ]
   _·_    : ∀ {t₁ t₂ a b} → [ s ] Γ ⊢ t₁ ∈ a →' b → [ s ] Γ ⊢ t₂ ∈ a → [ s ] Γ ⊢ t₁ · t₂ ∈ b
@@ -236,6 +238,9 @@ module WtTermTypeSubst where
     Λ (⊢substCtx (sym (map-weaken-⊙ Γ σ)) (⊢t / σ ↑))
   λ' a ⊢t           / σ = λ' (a Tp./ σ) (⊢t / σ)
   -- μ a ⊢t            / σ = μ  (a Tp./ σ) (⊢t / σ)
+  pack {τ₁ = τ₁} τ₂ ⊢t / σ = pack (τ₂ Tp./ σ) (⊢substTp (sub-commutes τ₁) (⊢t / σ))
+  _/_ {Γ = Γ} (unpack {τ₁ = τ₁} {τ₂ = τ₂} ⊢t₁ ⊢t₂) σ =
+    unpack (⊢t₁ / σ) (⊢subst (cong (_∷_ (τ₁ Tp./ σ ↑)) (sym (map-weaken-⊙ Γ σ))) refl (weaken-↑ τ₂) (⊢t₂ / (σ ↑)))
   _[_] {a = a} ⊢t b / σ =
     ⊢substTp (sym (sub-commutes a)) ((⊢t / σ) [ b Tp./ σ ])
   ⊢s · ⊢t           / σ = (⊢s / σ) · (⊢t / σ)
@@ -294,6 +299,15 @@ module WtTermTermSubst where
   infixl 8  _/_ _/Var_
   infix  10 _↑
 
+  subw-/Var : ∀ {n} {m} {k} {τ} (ρ : Sub Fin m k) (Γ : Ctx k n) →
+              (τ ∷ weakenCtx (ρ C./Var Γ)) ≡ (ρ Var.↑ C./Var (τ ∷ weakenCtx Γ))
+  subw-/Var {τ = τ} ρ Γ = cong (τ ∷_) (begin
+                 C.weaken (ρ C./Var Γ) ≡⟨ C./Var-weaken ρ Γ ⟩
+                 ρ C./Var C.weaken Γ ≡⟨ refl ⟩
+                 map (lookup (τ ∷ C.weaken Γ) ∘ suc) ρ ≡⟨ map-∘ (lookup (τ ∷ C.weaken Γ)) suc ρ ⟩
+                 map (lookup (τ ∷ C.weaken Γ)) (map suc ρ)
+               ∎)
+
   -- Application of term variable substitutions (renaming) lifted to
   -- well-typed terms.
   _/Var_ : ∀ {s m n k} {Γ : Ctx k n} {t : Term m n} {a : Type n}
@@ -304,6 +318,10 @@ module WtTermTermSubst where
     Λ    (ρ      /Var ⊢substCtx (C./Var-weaken ρ Γ) ⊢t)
   _/Var_ {Γ = Γ} ρ (λ' a ⊢t) =
     λ' a (ρ Var.↑ /Var ⊢substCtx (C./Var-∷ a ρ Γ) ⊢t)
+  _/Var_ {Γ = Γ} ρ (pack τ₂ ⊢t) =
+    pack τ₂ (ρ /Var ⊢t)
+  _/Var_ {Γ = Γ} ρ (unpack {τ₁ = τ₁} {τ₂ = τ₂} ⊢t₁ ⊢t₂) =
+    unpack (ρ /Var ⊢t₁) ((ρ Var.↑) /Var ⊢substCtx (subw-/Var ρ Γ) ⊢t₂)
   -- _/Var_ {Γ = Γ} ρ (μ a ⊢t)  =
     -- μ  a (ρ Var.↑ /Var ⊢substCtx (C./Var-∷ a ρ Γ) ⊢t)
   ρ /Var (⊢t [ b ])          = (ρ /Var ⊢t) [ b ]
@@ -349,12 +367,14 @@ module WtTermTermSubst where
   -- Application of term substitutions lifted to well-typed terms
   _/_ : ∀ {s m n k} {Γ : Ctx m n} {Δ : Ctx k n} {t a ρ} →
         [ s ] Γ ⊢ t ∈ a → [ s ] Γ ⇒ Δ ⊢ ρ → [ s ] Δ ⊢ t Tm./ ρ ∈ a
-  var x       / ⊢ρ = lookup-⊢ x ⊢ρ
-  Λ ⊢t        / ⊢ρ = Λ (⊢t / (WtTermTypeSubst.weakenAll ⊢ρ))
-  λ' a ⊢t     / ⊢ρ = λ' a (⊢t / ⊢ρ ↑)
+  var x          / ⊢ρ = lookup-⊢ x ⊢ρ
+  Λ ⊢t           / ⊢ρ = Λ (⊢t / (WtTermTypeSubst.weakenAll ⊢ρ))
+  λ' a ⊢t        / ⊢ρ = λ' a (⊢t / ⊢ρ ↑)
+  pack τ₂ ⊢t     / ⊢ρ = pack τ₂ (⊢t / ⊢ρ)
+  unpack ⊢t₁ ⊢t₂ / ⊢ρ = unpack (⊢t₁ / ⊢ρ) (⊢t₂ / (WtTermTypeSubst.weakenAll ⊢ρ) ↑)
   -- μ a ⊢t      / ⊢ρ = μ a (⊢t / ⊢ρ ↑)
-  (⊢t [ a ])  / ⊢ρ = (⊢t / ⊢ρ) [ a ]
-  (⊢s · ⊢t)   / ⊢ρ = (⊢s / ⊢ρ) · (⊢t / ⊢ρ)
+  (⊢t [ a ])     / ⊢ρ = (⊢t / ⊢ρ) [ a ]
+  (⊢s · ⊢t)      / ⊢ρ = (⊢s / ⊢ρ) · (⊢t / ⊢ρ)
   _/_ {s = iso} (fold a ⊢t) ⊢ρ = fold a (⊢t / ⊢ρ)
   _/_ {s = equi} (fold a ⊢t) ⊢ρ = fold a (⊢t / ⊢ρ)
   _/_ {s = iso} (unfold a ⊢t) ⊢ρ = unfold a (⊢t / ⊢ρ)
@@ -459,7 +479,7 @@ module WtTermOperators where
       as′→ⁿb′≡ : as′ →ⁿ b′ ≡ (map weaken as′ →ⁿ var zero) [/tp b ]
       as′→ⁿb′≡ = begin
           as′ →ⁿ b′
-        ≡⟨ cong (λ b → as′ →ⁿ b) (lookup-++-inject+ as′ Γ x) ⟩
+        ≡⟨ cong (λ b → as′ →ⁿ b) (lookup-++ˡ as′ Γ x) ⟩
           as′ →ⁿ b
         ≡⟨ cong (λ as′ → as′ →ⁿ b) (sym (map-weaken-⊙-sub {ρ = as′})) ⟩
           map weaken as′ ⊙ sub b →ⁿ b

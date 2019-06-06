@@ -423,7 +423,7 @@ module WtTermOperators where
                  [ s ] Γ ⊢ t ∈ a [/tp b ] → [ s ] Γ ⊢ Ut.as-∃ a pack b , t ∈ ∃ a
   as-∃ a pack b , ⊢t =
     Λ (λ' (∀' (weaken↑ a →' var (suc zero))) ((var zero [ weaken b ]) · ⊢t′))
-    where ⊢t′ = ⊢Tm.weaken (⊢substTp (weaken-sub a b) (⊢Tp.weaken ⊢t))
+    where ⊢t′ = ⊢Tm.weaken (⊢substTp (weaken-sub′ a b) (⊢Tp.weaken ⊢t))
 
   -- Unpacking existential types
   unpack_in'_ : ∀ {s m n} {Γ : Ctx m n} {t₁ : Term m n}

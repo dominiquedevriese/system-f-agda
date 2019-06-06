@@ -98,9 +98,9 @@ module TypeLemmas where
     open TermLemmas lemmas
 
     -- Weakening commutes with single-variable substitution
-    weaken-sub : ∀ {n} (a : T (1 + n)) (b : T n) →
+    weaken-sub′ : ∀ {n} (a : T (1 + n)) (b : T n) →
                  weaken (a / sub b) ≡ a / wk ↑ / sub (weaken b)
-    weaken-sub a b = begin
+    weaken-sub′ a b = begin
       weaken (a / sub b)        ≡⟨ sym (/-wk′ (a / sub b)) ⟩
       a / sub b / wk            ≡⟨ sub-commutes a ⟩
       a / wk ↑ / sub (b / wk)   ≡⟨ cong (λ c → a / wk ↑ / sub c) (/-wk′ b) ⟩

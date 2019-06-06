@@ -599,7 +599,7 @@ unerase-eval (unpack {τ₁ = τ₁} {τ₂ = τ₂} ty₁ ty₂) unpackPack | p
     (underlying⟶t*
       (subst₂ _⟶t_
         (cong (λ t → unpack (pack τ t) (unerase ty₂)) (sym (unerase-vty tyV)))
-        (sym (trans (unerase-⊢substTp (TypeLemmas.weaken-sub′ τ₂) ((ty₂ [/⊢tmTp′ τ ]) [/⊢tmTm ty ]))
+        (sym (trans (unerase-⊢substTp (TypeLemmas.weaken-sub τ₂) ((ty₂ [/⊢tmTp′ τ ]) [/⊢tmTm ty ]))
         (trans
           (unerase-[/⊢tmTm] (ty₂ WtTermTypeSubst.[/ τ ]) ty)
           (cong₂ _[/tmTm_] (unerase-[/⊢tmTp′] ty₂ τ) (unerase-vty tyV)))))

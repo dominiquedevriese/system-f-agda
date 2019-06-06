@@ -80,7 +80,7 @@ preservation (unpack ty₁ ty₂) (unpack eval) = unpack (preservation ty₁ eva
 preservation (pack τ ty) (pack eval) = pack τ (preservation ty eval)
 preservation (unpack ty₁ ty₂) unpackPack with normalizeDeriv ty₁ | normalizeDeriv-Value ty₁
 preservation {s} {τ₂} {t₁} {t₂} (unpack {τ₁ = τ₁} {τ₂ = τ₂} ty₁ ty₂) (unpackPack {v = v}) | pack τ ty | pack tyV =
-  ⊢substTp (TypeLemmas.weaken-sub′ τ₂) ((ty₂ WtTermTypeSubst.[/ τ ]) [/⊢tmTm ty ])
+  ⊢substTp (TypeLemmas.weaken-sub τ₂) ((ty₂ WtTermTypeSubst.[/ τ ]) [/⊢tmTm ty ])
 preservation {s = iso} (fold a ty) (fold eval) = fold a (preservation ty eval)
 preservation {iso} (unfold a ty) (unfold eval) = unfold a (preservation ty eval)
 preservation {iso} (unfold a (fold .a ty)) unfoldFold = ty

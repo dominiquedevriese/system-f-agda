@@ -14,7 +14,7 @@
 --
 --   https://github.com/sstucki/system-f-agda
 --
--- The main result is in SystemF/FullAbstraction.agda.
+-- The main results are in SystemF/FullAbstraction.agda.
 -- The rest of this file contains the README for the original code by Sandro Stucki.
 -- Note that we have deleted files that were unneeded for our purposes, so not all
 --  of the files discussed below are still there..

@@ -1,5 +1,16 @@
 # system-f-agda
 
+
+An Agda proof that the erasure of System F with iso-recursive types to System F with equi-recursive types constitutes a fully abstract compiler.
+It is based on a pre-existing formalisation of System F in Agda by Sandro Stucki:
+
+  https://github.com/sstucki/system-f-agda
+
+The main results are in src/SystemF/FullAbstraction.agda.
+The rest of this file contains the README for the original code by Sandro Stucki.
+
+
+
 A formalization of the polymorphic lambda calculus extended with
 iso-recursive types
 

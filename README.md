@@ -76,3 +76,4 @@ See the `LICENSE` file.
 
 ------------------------------------------------------------------------
 Sandro Stucki -- Copyright (c) 2015 EPFL
+

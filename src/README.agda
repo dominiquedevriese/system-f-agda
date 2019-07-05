@@ -19,6 +19,7 @@
 -- Note that we have deleted files that were unneeded for our purposes, so not all
 --  of the files discussed below are still there..
 
+-- This code has been tested to type-check with Agda 2.6.0.1 and the latest HEAD of agda-stdlib (e0dc14a2)
 
 
 

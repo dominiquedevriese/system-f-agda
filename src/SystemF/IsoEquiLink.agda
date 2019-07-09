@@ -649,3 +649,11 @@ erase-⇓-inv {t} {τ} ty (term v evals) = term (unerase-vderiv (normalizeDeriv-
                  (subst ((unerase (preservation* (erase-ty ty) evals)) ⟶t*_)
                    (unerase-vty (normalizeDeriv-Value tyV))
                    (normalizeDeriv-unerase-eval* (preservation* (erase-ty ty) evals)))
+
+
+unerase-⇓-inv : {t : Term 0 0} {τ : Type 0} →
+                (ty : [ equi ] [] ⊢ t ∈ τ) →
+                unerase ty ⇓ → t ⇓
+unerase-⇓-inv ty tm = subst _⇓ (erase-unerase ty) tm′
+  where tm′ : erase (unerase ty) ⇓
+        tm′ = erase-⇓ tm
